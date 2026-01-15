@@ -1,0 +1,287 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-size: 16px;
+  font-family: "DM Sans", Helvetica, Arial, sans-serif;
+  background: #fff;
+}
+
+.app {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 360px;
+  padding: 20px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+  position: relative;
+  z-index: 100;
+  max-height: 100vh;
+  overflow:scroll;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.app-title {
+  margin: 0;
+  font-size: 42px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.panel {
+  padding-top: 8px;
+  border-top: 2px solid #000;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.panel-title {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.field-row.color {
+    gap: 24px;
+}
+
+.field-row.small {
+  justify-content: flex-start;
+  gap: 12px;
+  font-size: 16px;
+}
+
+.field-column {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-label {
+  font-size: 16px;
+  padding-bottom: 4px;
+  display: block;
+}
+
+.inline-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+p.field-note {
+    color: #999;
+    font-size: 14px;
+    margin-top: 2px;
+}
+
+.inline-field label {
+  white-space: nowrap;
+}
+
+.inline-field input[type="range"] {
+  flex: 1; /* slider expands */
+}
+
+.sidebar label {
+  font-size: 16px;
+}
+
+.sidebar input[type="text"],
+.sidebar select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #999;
+  font-size: 16px;
+  background: #fff;
+}
+
+.sidebar input[type="color"] {
+  width: 32px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.sidebar .color-inputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar input[type="range"] {
+  width: 100%;
+  accent-color: #000;
+  transform: translateY(-2px);
+}
+
+.random-controls {
+  padding: 15px 15px;
+  border-radius: 8px;
+  background: #eaeaea;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.btn {
+  display: inline-block;
+  padding: 12px 14px;
+  border-radius: 999px;
+  border: none;
+  background: #000;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+}
+
+.btn-primary {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.btn:hover {
+  opacity: 0.8;
+}
+
+.sidebar input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+}
+
+.canvas-area {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #d9d9d9;
+}
+
+#canvas-container {
+  position: relative;
+  padding: 40px;
+  width: 100%;
+  max-width: 100%;
+  height: 100vh; 
+  background: #ddd;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+canvas {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  display: block;
+  object-fit: contain;
+}
+
+
+/* Info Panel */
+.app-info, .info-close {
+  border-radius: 50%;
+  width: 20px;
+  height: 40px;
+  inline-size: 40px;
+  background: #000;
+  color: #fff;
+  text-align: center;
+  vertical-align: middle;
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  border: none;
+  font-size: 18px;
+}
+
+.app-info:hover, .info-close:hover {
+  opacity: 0.8;
+  cursor: pointer;
+}
+
+.info-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
+}
+
+.info-panel.open::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.3);
+}
+
+.info-panel-inner {
+  position: relative;
+  height: 100%;
+  display: flex;
+  transform: translateX(-100%);
+  transition: transform 0.5s ease-out;
+  width: 500px;
+  background: #fff;
+  padding: 20px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  opacity: 1;
+}
+
+.info-panel.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.info-panel.open .info-panel-inner {
+  transform: translateX(0);
+}
+.info-panel p {
+  line-height: 1.2;
+  font-size: 20px;
+  max-width: 430px;
+}
+
+.info-credit, .info-credit a {
+  margin-top: auto;
+  font-family: "DM Mono", monospace;
+  color: #999;
+}
+
+p.info-credit, .info-credit a {
+    font-size: 14px;
+}
+
+.info-credit a:hover {
+    color: #000;
+}

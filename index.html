@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="p5.min.js"></script>
+    <link rel="stylesheet" href="style.css" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
+<body>
+  <div class="app">
+    <!-- LEFT SIDEBAR CONTROLS -->
+    <aside class="sidebar">
+      <header class="sidebar-header">
+        <h1 class="app-title">
+          Block Draft Drafter
+        </h1>
+      </header>
+
+      <!-- COLOR SECTION -->
+      <section class="panel">
+        <h2 class="panel-title">Color</h2>
+        <div class="field-row color">
+            <div class = "color-inputs">
+                <input type="color" id="colorA" value="#000000" oninput="updateLayout()"/>
+                <label for="colorA">Block A</label>
+            </div>
+            <div class = "color-inputs">
+                <input type="color" id="colorB" value="#ffffff" oninput="updateLayout()"/>
+                <label for="colorB">Block B</label>
+            </div>
+        </div>
+      </section>
+
+      <!-- WARP SECTION -->
+      <section class="panel">
+        <h2 class="panel-title">Warp</h2>
+
+        <div class="field-column">
+          <select id="warp-preset" onchange="updateLayout()">
+            <option value="ABABABABABABAB">1:1</option>
+            <option value="AB5AB5AB5AB5A">1:5</option>
+            <option value="AB2A3B4A5B5A5B4A3B2A">Optical</option>
+            <option value="random">Random</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+
+        <div id="col-random-controls" class="random-controls" style="display: none;">
+          <div class="inline-field">
+            <label class="field-label">Length</label>
+          <input type="range" id="col-random-length" min="4" max="100" value="15" oninput="generateColRandom()"/>
+          </div>
+          <button type="button" class="btn" onclick="generateColRandom()">
+            Generate
+          </button>
+        </div>
+
+        <div id="input-cols-wrapper" class="field-column">
+             <label for="input-cols" class="field-label">Edit Sequence:</label>
+            <input type="text" id="input-cols" name="input" placeholder="WARP BLOCKS" oninput="updateLayout()" />
+            <p class="field-note">e.g. ABABBAAA or ABAB2A3</p>
+        </div>
+
+        <div class="field-row">
+          <label for="col-mirror">Mirror?</label>
+          <input type="checkbox" id="col-mirror" onchange="updateLayout()" />
+        </div>
+
+        <div class="field-column">
+            <div class="inline-field">
+                <label for="col-repeats" class="field-label">Repeats</label>
+          <input type="range" id="col-repeats" name="repeats" min="1" max="10" value="1" oninput="updateLayout()" />
+            </div>
+        </div>
+      </section>
+
+      <!-- WEFT SECTION -->
+      <section class="panel">
+        <h2 class="panel-title">Weft</h2>
+
+        <div class="field-column">
+          <select id="row-mode" onchange="updateLayout()">
+            <option value="tromp" selected>Tromp as Writ</option>
+            <option value="AB5AB5AB5AB5">1:5</option>
+            <option value="C3A5C3A5C3A5C3A5C3">Squares</option>
+            <option value="random">Random</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+
+        <div id="row-random-controls" class="random-controls" style="display: none;">
+          <div>
+            <span class="field-label">Include blocks</span>
+            <div class="field-row small">
+                <label><input type="checkbox" id="rowRandA" checked onchange="generateRowRandom()" />A</label>
+                <label><input type="checkbox" id="rowRandB" checked onchange="generateRowRandom()" />B</label>
+                <label><input type="checkbox" id="rowRandC" onchange="generateRowRandom()" />C</label>
+                <label><input type="checkbox" id="rowRandD" onchange="generateRowRandom()" />D</label>
+            </div>
+          </div>
+
+          <div class="inline-field">
+            <label class="field-label">Length</label>
+             <input type="range" id="row-random-length" min="4" max="100" value="15" oninput="generateRowRandom()"/>
+          </div>
+          <button type="button" class="btn" onclick="generateRowRandom()">
+            Generate
+          </button>
+        </div>
+
+        <div id="input-rows-wrapper" class="field-column">
+          <label for="input-rows" class="field-label">Edit Sequence:</label>
+          <input type="text" id="input-rows" name="input" placeholder="WEFT BLOCKS" oninput="updateLayout()" />
+          <p class="field-note">Also add C & D for rows of all one layer</p>
+        </div>
+
+        <div class="field-column">
+            <div class="inline-field">
+                <label for="row-repeats" class="field-label">Repeats</label>
+                <input type="range" id="row-repeats" name="repeats" min="1" max="10" value="1" oninput="updateLayout()"/>  
+            </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 class="panel-title">Save</h2>
+        <label class="field-row">
+          <input type="checkbox" id="show-labels" onchange="updateLayout()" />
+          <span>Show sequences</span>
+        </label>
+        <button id="save" class="btn btn-primary" onclick="saveImage()">
+          Download Image
+        </button>
+      </section>
+
+      <button class="app-info" id="app-info" onclick="openInfoPanel()">
+            ?
+      </button>
+    </aside>
+
+    <main class="canvas-area">
+      <div id="canvas-container"></div>
+    </main>
+  </div>
+
+  <div id="info-panel" class="info-panel">
+  <div class="info-panel-inner">
+      <button class="info-close" type="button" onclick="closeInfoPanel()">×</button>
+
+      <h2 class="app-title">Block Draft <br> Drafter</h2>
+        <div>
+            <p>
+                This is a sketching tool for quickly generating profile/block drafts for
+                weaving (and not a replacement for full drafting software).
+            </p>
+
+            <p>
+                It was built for sketching double-weave block so it currently only
+                supports 2 blocks — A and B.
+            </p>
+
+            <p>
+                The custom fields support strings of A and B, or shorthand with letters and numbers to make
+                longer stretches (e.g. A5 instead of AAAAA).
+            </p>
+
+            <p>
+                The weft custom fields also support C and D in the string to represent
+                rows with both light or both dark on the top layer.
+            </p>
+        </div>
+
+      <p class="info-credit">
+        Built by <a href="https://www.abconnell.com/">Allison Connell</a>, with thanks to <a href="https://veravandeseyp.com/">Vera Van De Seyp</a> and her Browser Tools class.
+      </p>
+
+  </div>
+</div>
+
+  <script src="script.js"></script>
+</body>
+</html>
