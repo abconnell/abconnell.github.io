@@ -1,6 +1,6 @@
 let blockSize = 20;
 
-let defaultColSeqStr = "AAABBBAB";
+let defaultColSeqStr = "A2BABA4B10BA4BABA2";
 let colSeqStr = defaultColSeqStr;
 let customColSeqStr = defaultColSeqStr;
 let lastWarpPresetValue = "ABABABABABABAB";
@@ -100,8 +100,6 @@ function setup() {
     cnv.parent("canvas-scale-wrap");
     background(255);
     noStroke();
-
-    pixelDensity(1);
 
     const container = document.getElementById("canvas-container");
     iroPopover = document.getElementById("iro-popover");
@@ -686,6 +684,20 @@ function generateColRandom() {
   updateLayout();
 }
 
+function editColRandom() {
+  const colSel = document.getElementById("warp-preset");
+  const colInputEl = document.getElementById("input-cols");
+
+  colSel.value = "custom";
+  colInputEl.value = randomColSeqStr || colSeqStr || "";
+
+  if (typeof customColSeqStr !== "undefined") {
+    customColSeqStr = colInputEl.value.trim() || customColSeqStr;
+  }
+
+  updateLayout();
+}
+
 
 function generateRowRandom() {
   const lenInput = document.getElementById("row-random-length");
@@ -711,6 +723,20 @@ function generateRowRandom() {
   
   randomRowSeqStr = seq;
   rowSeqStr = seq;
+
+  updateLayout();
+}
+
+function editRowRandom() {
+  const rowSel = document.getElementById("row-mode");
+  const rowInputEl = document.getElementById("input-rows");
+
+  rowSel.value = "custom";
+  rowInputEl.value = randomRowSeqStr || rowSeqStr || "";
+
+  if (typeof customRowSeqStr !== "undefined") {
+    customRowSeqStr = rowInputEl.value.trim() || customRowSeqStr;
+  }
 
   updateLayout();
 }
@@ -791,18 +817,21 @@ function openThreadPickerAtButton(btn, kind, layer, index) {
     const cr = container.getBoundingClientRect();
     const br = btn.elt.getBoundingClientRect();
 
-    const popW = 260;
-    const popH = 260;
+    iroPopover.style.display = "block";
+    const pr = iroPopover.getBoundingClientRect();
+    const popW = pr.width;
+    const popH = pr.height;
+    const pad = 12;
 
-    let x = (br.right - cr.left) + 12;
-    let y = (br.top - cr.top);
+    let x = br.right + pad;
+    let y = br.top + pad*1.5;
 
-    const maxY = cr.height - popH - 8;
-    y = Math.max(8, Math.min(y, maxY));
+    const maxX = window.innerWidth - popW - pad;
+    const maxY = window.innerHeight - popH - pad;
 
-    const maxX = cr.width - popW - 8;
-    if (x > maxX) x = (br.left - cr.left) - popW - 12;
-    x = Math.max(8, Math.min(x,maxX));
+    if (x > maxX) x = br.left - popW - pad;
+    x = Math.max(pad, Math.min(x, maxX));
+    y = Math.max(pad, Math.min(y, maxY));
 
     renderIroSwatches(collectUsedColors());
 

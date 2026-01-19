@@ -177,6 +177,20 @@ p.field-note {
   margin-top: 8px;
 }
 
+.btn-secondary {
+  background: #fff;
+  border: 1px solid #000;
+  color: #000;
+}
+
+.random-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.random-actions .btn {
+  flex: 1 1 auto;
+}
 .btn:hover {
   opacity: 0.8;
 }

@@ -41,11 +41,12 @@
 
         <div class="field-column">
           <select id="warp-preset" onchange="updateLayout()">
+            <option value="custom">Custom</option>
+            <option value="random">Random</option>
+            <option disabled>────────────</option>
             <option value="ABABABABABABAB">1:1</option>
             <option value="AB5AB5AB5AB5A">1:5</option>
             <option value="AB2A3B4A5B5A5B4A3B2A">Optical</option>
-            <option value="random">Random</option>
-            <option value="custom">Custom</option>
           </select>
         </div>
 
@@ -54,9 +55,14 @@
             <label class="field-label">Length</label>
           <input type="range" id="col-random-length" min="4" max="100" value="15" oninput="generateColRandom()"/>
           </div>
-          <button type="button" class="btn" onclick="generateColRandom()">
-            Generate
-          </button>
+          <div class="random-actions">
+            <button type="button" class="btn" onclick="generateColRandom()">
+              Generate
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="editColRandom()">
+              Edit
+            </button>
+          </div>
         </div>
 
         <div id="input-cols-wrapper" class="field-column">
@@ -85,10 +91,11 @@
         <div class="field-column">
           <select id="row-mode" onchange="updateLayout()">
             <option value="tromp" selected>Tromp as Writ</option>
+            <option value="custom">Custom</option>
+            <option value="random">Random</option>
+            <option disabled>────────────</option>
             <option value="AB5AB5AB5AB5">1:5</option>
             <option value="C3A5C3A5C3A5C3A5C3">Squares</option>
-            <option value="random">Random</option>
-            <option value="custom">Custom</option>
           </select>
         </div>
 
@@ -107,9 +114,14 @@
             <label class="field-label">Length</label>
              <input type="range" id="row-random-length" min="4" max="100" value="15" oninput="generateRowRandom()"/>
           </div>
-          <button type="button" class="btn" onclick="generateRowRandom()">
-            Generate
-          </button>
+          <div class="random-actions">
+            <button type="button" class="btn" onclick="generateRowRandom()">
+              Generate
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="editRowRandom()">
+              Edit
+            </button>
+          </div>
         </div>
 
         <div id="input-rows-wrapper" class="field-column">
