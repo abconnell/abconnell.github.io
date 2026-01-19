@@ -119,18 +119,29 @@ p.field-note {
   background: #fff;
 }
 
-.sidebar input[type="color"] {
-  width: 32px;
-  height: 36px;
-  padding: 0;
-  border: none;
-  background: transparent;
-}
-
-.sidebar .color-inputs {
+.sidebar .base-color {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.color-chip {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid rgba(0,0,0,0.3);
+  background: 000;
+  cursor: pointer;
+}
+
+.color-chip:focus{
+  outline: 2px solid rgba(0,0,0,0.3);
+  outline-offset: 2px;
+}
+
+#iro-baseA, #iro-baseB {
+  width: 140px;
 }
 
 .sidebar input[type="range"] {
@@ -177,6 +188,9 @@ p.field-note {
 
 .canvas-area {
   flex: 1;
+  min-width: 0;
+  height: 100vh;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -187,8 +201,8 @@ p.field-note {
   position: relative;
   padding: 40px;
   width: 100%;
-  max-width: 100%;
-  height: 100vh; 
+  height: 100%;
+  overflow: hidden;
   background: #ddd;
   box-sizing: border-box;
   display: flex;
@@ -197,14 +211,71 @@ p.field-note {
 }
 
 canvas {
-  max-width: 100%;
-  max-height: 100%;
   width: auto;
   height: auto;
   display: block;
-  object-fit: contain;
+  /*object-fit: contain;*/
 }
 
+#canvas-scale-wrap {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: top left;
+  z-index: 1;
+}
+
+.swatch-btn {
+  position: absolute;
+  z-index: 50;
+  pointer-events: auto;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: rgba(255,255,255,0.0);
+  color:rgba(0,0,0,0.0);
+  cursor: pointer;
+}
+
+#thread-picker {
+  z-index: 100;
+}
+
+.iro-popover{
+  position: fixed;
+  z-index: 999;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  padding: 10px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  overflow: visible;
+}
+
+.iro-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 10px;
+  max-width: 180px;
+}
+
+.iro-swatch{
+  width: 18px;
+  height: 15px;
+  border-radius: 3px;
+  border: 1px solid rgba(0,0,0,0.3);
+  cursor: pointer;
+}
+
+#add-swatch-btn {
+  margin-top: 8px;
+  display: block;
+  border-radius: 20px;
+  background: #fff;
+  border: 1px solid #000;
+  cursor: pointer;
+}
 
 /* Info Panel */
 .app-info, .info-close {

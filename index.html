@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script src="p5.min.js"></script>
     <link rel="stylesheet" href="style.css" />
-
+    <script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
-<body>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
+  <body>
   <div class="app">
     <!-- LEFT SIDEBAR CONTROLS -->
     <aside class="sidebar">
@@ -23,13 +23,14 @@
       <section class="panel">
         <h2 class="panel-title">Color</h2>
         <div class="field-row color">
-            <div class = "color-inputs">
-                <input type="color" id="colorA" value="#000000" oninput="updateLayout()"/>
-                <label for="colorA">Block A</label>
+            <div class="base-color">
+              <label>Block A</label>
+              <button id ="baseA-chip" class="color-chip" type="button" onclick="openBasePicker('A')"></button>
             </div>
-            <div class = "color-inputs">
-                <input type="color" id="colorB" value="#ffffff" oninput="updateLayout()"/>
-                <label for="colorB">Block B</label>
+
+            <div class="base-color">
+              <label>Block B</label>
+              <button id ="baseB-chip" class="color-chip" type="button" onclick="openBasePicker('B')"></button>
             </div>
         </div>
       </section>
@@ -142,7 +143,14 @@
     </aside>
 
     <main class="canvas-area">
-      <div id="canvas-container"></div>
+      <div id="canvas-container">
+        <div id = "canvas-scale-wrap"></div>
+        <div id = "iro-popover" class = "iro-popover" style="display:none;">
+          <div id="iro-picker"></div>
+          <div id="iro-swatches" class="iro-swatches"></div>
+          <button id="add-swatch-btn" type="button">+ Swatch</button>
+        </div>
+      </div>
     </main>
   </div>
 

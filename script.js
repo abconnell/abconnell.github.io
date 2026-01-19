@@ -21,8 +21,46 @@ let warpAColors = [];
 let warpBColors = [];
 let weftAColors = [];
 let weftBColors = [];
-let threadPicker;
+
+let iroPicker;
+let iroPopover;
+let iroIgnoreChange = false;
+let lastAppliedHex = null;
 let activeThreadTarget = null;
+
+let userSwatches = [
+  // light neutrals
+  "#ffffff", // white
+  "#f2efe3", // warm off-white
+  "#c9c3b4", // warm gray / stone
+  "#cfe3f6", // pale blue
+  "#cddfc4", // pale sage
+
+  // darks + cools
+  "#1a1a1a", // near black
+  "#2e2a7f", // deep indigo
+  "#379a4a", // medium green
+  "#35543c", // dark forest green
+
+  // yellows + earth tones
+  "#f4cd4f", // golden yellow
+  "#f6ecab", // pale butter
+  "#9b3e1c", // rust / brick
+  "#ff7a1a", // bright orange
+
+  // reds + pinks + purples
+  "#d62f2f", // red
+  "#efb3a1", // peach
+  "#5a2f33", // dark maroon
+  "#8f3c8c", // magenta purple
+  "#d4a6de"  // lavender
+];
+
+let warpBtnA = [];
+let warpBtnB = [];
+let weftBtnA = [];
+let weftBtnB = [];
+let swatchButtonsBuilt = false;
 
 const swatchH = 12;
 const swatchW = 12;
@@ -58,121 +96,71 @@ let rowInputWrapper, rowInput, warpPresetSelect;
 
 
 function setup() {
-    let cnv = createCanvas(window.innerWidth - 40, window.innerHeight);
-    cnv.parent("canvas-container");
+    let cnv = createCanvas(10,10);
+    cnv.parent("canvas-scale-wrap");
     background(255);
     noStroke();
 
-    updateLayout()
+    pixelDensity(1);
 
-    threadPicker = createColorPicker('#ff0000');
-    threadPicker.id('thread-picker');
-    threadPicker.position(-1000,-1000);
-    threadPicker.input(onThreadColorChange);
+    const container = document.getElementById("canvas-container");
+    iroPopover = document.getElementById("iro-popover");
+
+    iroPicker = new iro.ColorPicker("#iro-picker", {
+
+      width: 180,
+      color: colorA,
+    });
+
+    renderIroSwatches();
+
+    document.getElementById("add-swatch-btn").addEventListener("click", (e) => {
+      e.stopPropagation(); // don’t close popover
+      addCurrentColorAsSwatch();
+    });
+
+    iroPicker.on("color:change", (c) => {
+      if (iroIgnoreChange) return;
+
+      const hex = c.hexString;
+      if(hex === lastAppliedHex) return;
+      lastAppliedHex = hex;
+
+      applyPickedColor(hex);
+    });
+
+    updateLayout()
 }
 
 let colorChangeTimeout = null;
 
-function onThreadColorChange() {
+function applyPickedColor(hex) {
   if (!activeThreadTarget) return;
-  const val = threadPicker.value();
-  const { kind, layer, index } = activeThreadTarget;
-  
-  if (kind === "warp") {
-    if (layer === 'A') warpAColors[index] = val;
-    else warpBColors[index] = val;
-  } else {
-    if (layer === 'A') weftAColors[index] = val;
-    else weftBColors[index] = val;
-  }
 
-  if (colorChangeTimeout) clearTimeout(colorChangeTimeout);
-  colorChangeTimeout = setTimeout(() => {
+  const t = activeThreadTarget;
+
+  if (t.kind === "base") {
+    if (t.layer === "A") colorA = hex;
+    else colorB = hex;
+
+    syncBaseChips();
     makeLayout();
-    colorChangeTimeout = null;
-  }, 100);
-
-  makeLayout();
-}
-
-let xWhenClicked = 0
-
-function mousePressed(e) {
-  let canvas = document.getElementById("defaultCanvas0")
-  if(!canvas) return;
-
-  const pickerEl = threadPicker?.elt;
-  if (e && pickerEl && e.target === pickerEl) return;
-
-  if (e && e.target !== canvas) {
-    activeThreadTarget = null;
-    threadPicker.position(-1000, -1000);
     return;
   }
 
-  const rect = canvas.getBoundingClientRect();
-  const mx = (e.clientX - rect.left) * (width  / rect.width);
-  const my = (e.clientY - rect.top)  * (height / rect.height);
+  // existing warp/weft behavior:
+  const { kind, layer, index } = t;
 
-  //warp swatches
-  const topMinY = topSwatchYA;
-  const topMaxY = topSwatchYB + swatchH;
-  if(my >= topMinY && my <= topMaxY && mx >= offsetX && mx <= offsetX + totalW) {
-    let xPos = offsetX;
-
-    for (let c = 0; c < colW.length; c++) {
-      const w = colW[c];
-
-      if (mx >= xPos && mx <= xPos + w) {
-        const layer = (my <= topSwatchYA + swatchH) ? 'A' : 'B';
-        activeThreadTarget = { kind: 'warp', layer, index: c };
-
-        const effectiveColor = layer === 'A' ? warpAColors[c] || colorA : warpBColors[c] || colorB;
-        
-        const swatchMidX = xPos + w / 2;
-        const pageX = rect.left + (swatchMidX / width) * rect.width;
-        const pageY = rect.top  + (my / height) * rect.height;
-
-        threadPicker.position(pageX, pageY + 10);
-        threadPicker.value(effectiveColor);
-        return;
-      }
-      xPos += w;
-    } 
-  } 
-
-  //weft swatches
-  const leftMinX = leftSwatchXA;
-  const leftMaxX = leftSwatchXB + swatchW;
-
-  if (mx >= leftMinX && mx <= leftMaxX && my >= offsetY && my <= offsetY + totalH) {
-    let yPos = offsetY;
-
-    for (let r = 0; r < rowH.length; r++) {
-      const h = rowH[r];
-
-      if (my >= yPos && my <= yPos + h) {
-        const layer = (mx <= leftSwatchXA + swatchW) ? 'A' : 'B';
-        activeThreadTarget = { kind: 'weft', layer, index: r };
-
-        const effectiveColor = layer === 'A' ? weftAColors[r] || colorA : weftBColors[r] || colorB;
-        
-        const swatchMidY = yPos + h / 2;
-        const pageX = rect.left + (mx / width) * rect.width;
-        const pageY = rect.top  + (swatchMidY / height) * rect.height;
-
-        threadPicker.position(pageX + 10, pageY);
-        threadPicker.value(effectiveColor);
-        return;
-      }
-      yPos += h;
-    }
+  if (kind === "warp") {
+    if (layer === "A") warpAColors[index] = hex;
+    else warpBColors[index] = hex;
+  } else {
+    if (layer === "A") weftAColors[index] = hex;
+    else weftBColors[index] = hex;
   }
 
-  activeThreadTarget = null;
-  threadPicker.position(-1000, -1000);
+  makeLayout();
 }
-
 
 function makeLayout() {
   // 1) parse base sequences
@@ -231,11 +219,6 @@ function makeLayout() {
   for (let c = 0; c < colW.length; c++) totalW += colW[c];
   for (let r = 0; r < rowH.length; r++) totalH += rowH[r];
 
-  gridOffsetX = offsetX;
-  gridOffsetY = offsetY;
-  gridWidth   = totalW;
-  gridHeight  = totalH;
-
   // store column positions for the color picker hit detection
   colPositions = [];
   let accumX = 0;
@@ -256,10 +239,16 @@ function makeLayout() {
   const rightMargin = showLabels ? 40 : 0;
 
   resizeCanvas(totalW + leftMargin + rightMargin, totalH + topMargin);
+  fitToViewport(totalW + leftMargin + rightMargin, totalH + topMargin);
   background(221);
 
   offsetX = leftMargin;
   offsetY = topMargin;
+
+  gridOffsetX = offsetX;
+  gridOffsetY = offsetY;
+  gridWidth   = totalW;
+  gridHeight  = totalH;
 
   //draw grid
   let y = offsetY;
@@ -298,9 +287,16 @@ function makeLayout() {
       x += colW[c];
     }
     y += rowH[r];
+
   }
 
   //swatches
+
+  const canvasEl = document.getElementById("canvas-scale-wrap");
+  const containerEl = document.getElementById("canvas-container");
+  const canvasRect = canvasEl.getBoundingClientRect();
+  const containerRect = containerEl.getBoundingClientRect();
+
   noStroke();
   fill(90);
   textAlign(LEFT, CENTER);
@@ -323,6 +319,27 @@ function makeLayout() {
     fill(warpBColors[c] || colorB);
     rect(xPos, topSwatchYB, w, swatchH);
 
+    //buttons
+    const btnA = ensureSwatchButton(warpBtnA, c, "A", () =>
+      openThreadPickerAtButton(btnA, "warp", "A", c)
+    );
+
+    const btnB = ensureSwatchButton(warpBtnB, c, "B", () =>
+      openThreadPickerAtButton(btnB, "warp", "B", c)
+    );
+
+    placeBtnOverCanvasRect(
+      btnA,
+      xPos, topSwatchYA,
+      xPos + w, topSwatchYA + swatchH
+    );
+
+    placeBtnOverCanvasRect(
+      btnB,
+      xPos, topSwatchYB,
+      xPos + w, topSwatchYB + swatchH
+    );
+
     xPos += w;
   }
 
@@ -335,6 +352,27 @@ function makeLayout() {
 
     fill(weftBColors[r] || colorB);
     rect(leftSwatchXB, yPos, swatchW, h);
+
+    //buttons
+    const btnA = ensureSwatchButton(weftBtnA, r, "A", () =>
+      openThreadPickerAtButton(btnA, "weft", "A", r)
+    );
+
+    const btnB = ensureSwatchButton(weftBtnB, r, "B", () =>
+      openThreadPickerAtButton(btnB, "weft", "B", r)
+    );
+
+    placeBtnOverCanvasRect(
+      btnA,
+      leftSwatchXA, yPos,
+      leftSwatchXA + swatchW, yPos + h
+    );
+
+    placeBtnOverCanvasRect(
+      btnB,
+      leftSwatchXB, yPos,
+      leftSwatchXB + swatchW, yPos + h
+    );
 
     yPos += h;
   }
@@ -382,6 +420,10 @@ function makeLayout() {
       yPos += rowH[r];
     }
   }
+
+  for (let i = colW.length; i < warpBtnA.length; i++) { warpBtnA[i]?.hide(); warpBtnB[i]?.hide(); }
+  for (let i = rowH.length; i < weftBtnA.length; i++) { weftBtnA[i]?.hide(); weftBtnB[i]?.hide(); }
+
 }
 
 function getWarpPreset() {
@@ -473,9 +515,6 @@ function updateLayout() {
   updateRowRandomVisibility();
   updateColRandomVisibility();
 
-  colorA = document.getElementById("colorA").value;
-  colorB = document.getElementById("colorB").value;
-
   const mirrorCheckbox = document.getElementById("col-mirror");
   mirrorCols = mirrorCheckbox && mirrorCheckbox.checked;
 
@@ -491,11 +530,8 @@ function updateLayout() {
   updateWarpMode(colInputEl);
   updateRowMode(rowInputEl);
 
-  
-  //alterWarpPicker.position(0, 0)
-  //warpColors = []
-
   makeLayout();
+  syncBaseChips();
 }
 
 //---------helpers--------
@@ -730,22 +766,229 @@ document.addEventListener("click", (e) => {
   if (e.target === panel) panel.classList.remove("open");
 });
 
-document.addEventListener("mousedown", (e) => {
-  const canvas = document.getElementById("defaultCanvas0");
-  if (!threadPicker || !canvas) return;
+// for swatch buttons
 
-  const pickerEl = threadPicker.elt;
+function ensureSwatchButton(arr, i, label, onClick) {
+  if (!arr[i]) {
+    const b = createButton(label);
+    b.addClass("swatch-btn");
+    b.parent("canvas-container");
+    b.style("position", "absolute");
+    b.mousePressed(onClick);
+    arr[i] = b;
+  }
+  return arr[i];
+}
 
-  if (e.target === canvas || e.target === pickerEl) return;
+function openThreadPickerAtButton(btn, kind, layer, index) {
+  activeThreadTarget = { kind, layer, index };
 
-  activeThreadTarget = null;
-  threadPicker.position(-1000, -1000);
-});
+  const effectiveColor = (kind === "warp")
+    ? (layer === 'A' ? (warpAColors[index] ?? colorA) : (warpBColors[index] ?? colorB))
+    : (layer === 'A' ? (weftAColors[index] ?? colorA) : (weftBColors[index] ?? colorB));
 
-function canvasToPage(xc, yc, rect) {
+    const container = document.getElementById("canvas-container");
+    const cr = container.getBoundingClientRect();
+    const br = btn.elt.getBoundingClientRect();
+
+    const popW = 260;
+    const popH = 260;
+
+    let x = (br.right - cr.left) + 12;
+    let y = (br.top - cr.top);
+
+    const maxY = cr.height - popH - 8;
+    y = Math.max(8, Math.min(y, maxY));
+
+    const maxX = cr.width - popW - 8;
+    if (x > maxX) x = (br.left - cr.left) - popW - 12;
+    x = Math.max(8, Math.min(x,maxX));
+
+    renderIroSwatches(collectUsedColors());
+
+    iroPopover.style.left = `${x}px`;
+    iroPopover.style.top  = `${y}px`;
+    iroPopover.style.display = "block";
+
+    iroIgnoreChange = true;
+    iroPicker.color.hexString = effectiveColor;
+    iroIgnoreChange = false;
+
+    lastAppliedHex = effectiveColor;
+
+}
+
+function placeBtnOverCanvasRect(btn, x0, y0, x1, y1) {
+  const wrap = document.getElementById("canvas-scale-wrap");
+
+  const wrapLeft = parseFloat(wrap.style.left || 0);
+  const wrapTop  = parseFloat(wrap.style.top  || 0);
+
+  const x = wrapLeft + x0 * currentScale;
+  const y = wrapTop  + y0 * currentScale;
+  const w = (x1-x0) * currentScale;
+  const h = (y1-y0) * currentScale;
+
+  btn.position(x,y);
+  btn.size(Math.max(6, w), Math.max(6, h));
+  btn.show();
+}
+
+
+function canvasToViewport(xc, yc, canvasRect, canvasEl) {
+  const sx = canvasEl.width / width;
+  const sy = canvasEl.height / height;
+
+  const bx = xc * sx;
+  const by = yc * sy;
+  
   return {
-    x: rect.left + (xc / width)  * rect.width  + window.scrollX,
-    y: rect.top  + (yc / height) * rect.height + window.scrollY
+    x: canvasRect.left + (bx / canvasEl.width)  * canvasRect.width,
+    y: canvasRect.top  + (by / canvasEl.height) * canvasRect.height
   };
 }
 
+function getComputedScale(el) {
+  const t = getComputedStyle(el).transform;
+  if (!t || t === "none") return 1;
+  const m = new DOMMatrixReadOnly(t);
+  return m.a; 
+}
+
+let currentScale = 1;
+
+function fitToViewport(contentW, contentH) {
+  const wrap = document.getElementById("canvas-scale-wrap");
+  const host = document.getElementById("canvas-container");
+
+  const hostRect = host.getBoundingClientRect();
+  const cs = getComputedStyle(host);
+
+  const padL = parseFloat(cs.paddingLeft);
+  const padR = parseFloat(cs.paddingRight);
+  const padT = parseFloat(cs.paddingTop);
+  const padB = parseFloat(cs.paddingBottom);
+
+  const availW = hostRect.width - padL - padR;
+  const availH = hostRect.height - padT - padB;
+
+  const s = Math.min(availW / contentW, availH / contentH, 1);
+  currentScale = s;
+
+  const scaledW = contentW * s;
+  const scaledH = contentH * s;
+
+  const left = padL + (availW - scaledW) / 2;
+  const top  = padT + (availH - scaledH) / 2;
+
+  wrap.style.transform = `scale(${s})`;
+  wrap.style.left = `${left}px`;
+  wrap.style.top  = `${top}px`;
+}
+
+document.addEventListener("pointerdown", (e) => {
+  if (!iroPopover || iroPopover.style.display === "none") return;
+
+  // clicks inside popover: keep it open
+  if (iroPopover.contains(e.target)) return;
+
+  // clicks on swatch buttons: keep it open (your button handler will reposition it)
+  if (e.target.closest && e.target.closest(".swatch-btn")) return;
+
+  iroPopover.style.display = "none";
+  activeThreadTarget = null;
+});
+
+function syncBaseChips() {
+  const a = document.getElementById("baseA-chip");
+  const b = document.getElementById("baseB-chip");
+
+  if (a) a.style.backgroundColor = colorA;
+  if (b) b.style.backgroundColor = colorB;
+}
+
+function openBasePicker(layer) {
+  activeThreadTarget = { kind: "base", layer };
+
+  const chip = document.getElementById(layer === "A" ? "baseA-chip" : "baseB-chip");
+  const br = chip.getBoundingClientRect();
+
+  const popW = 260, popH = 260;
+  let x = br.right + 12;
+  let y = br.top;
+
+  const maxX = window.innerWidth  - popW - 8;
+  const maxY = window.innerHeight - popH - 8;
+  if (x > maxX) x = br.left - popW - 12;
+  x = Math.max(8, Math.min(x, maxX));
+  y = Math.max(8, Math.min(y, maxY));
+
+  iroPopover.style.left = `${x}px`;
+  iroPopover.style.top  = `${y}px`;
+  iroPopover.style.display = "block";
+
+  const effective = (layer === "A") ? colorA : colorB;
+
+  iroIgnoreChange = true;
+  iroPicker.color.hexString = effective;
+  iroIgnoreChange = false;
+
+  lastAppliedHex = effective;
+}
+
+function renderIroSwatches() {
+  const wrap = document.getElementById("iro-swatches");
+  if (!wrap) return;
+
+  wrap.innerHTML = "";
+  
+  userSwatches.forEach(hex => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "iro-swatch";
+    b.style.backgroundColor = hex;
+
+    b.addEventListener("click", (e) => {
+      e.stopPropagation(); 
+      iroIgnoreChange = true;
+      iroPicker.color.hexString = hex;
+      iroIgnoreChange = false;
+
+      lastAppliedHex = hex;
+      applyPickedColor(hex);
+    });
+
+    wrap.appendChild(b);
+  });
+}
+
+function collectUsedColors() {
+  const set = new Set();
+
+  if (Array.isArray(userSwatches)) {
+    for (const s of userSwatches) if (s) set.add(String(s));
+  }
+
+  if (colorA) set.add(String(colorA));
+  if (colorB) set.add(String(colorB));
+
+  const pools = [warpAColors, warpBColors, weftAColors, weftBColors];
+  for (const arr of pools) {
+    if (!Array.isArray(arr)) continue;
+    for (const c of arr) if (c) set.add(String(c));
+  }
+
+  const out = Array.from(set);
+  return out.slice(0,24);
+
+}
+
+function addCurrentColorAsSwatch() {
+  const hex = iroPicker.color.hexString;
+
+  if (!userSwatches.includes(hex)) {
+    userSwatches.unshift(hex);
+    userSwatches = userSwatches.slice(0, 24);
+    renderIroSwatches();
+  }
+}
