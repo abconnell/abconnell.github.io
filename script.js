@@ -1021,3 +1021,7 @@ function addCurrentColorAsSwatch() {
     renderIroSwatches();
   }
 }
+
+function windowResized() {
+  updateLayout();
+}
