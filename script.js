@@ -1204,8 +1204,8 @@ function paintPickupCells(centerRow, centerCol, value) {
   const halfW = Math.floor(pickupPenW / 2);
   const halfH = Math.floor(pickupPenH / 2);
   let changed = false;
-  for (let dr = -halfH; dr <= halfH; dr++) {
-    for (let dc = -halfW; dc <= halfW; dc++) {
+  for (let dr = -halfH; dr < -halfH + pickupPenH; dr++) {
+    for (let dc = -halfW; dc < -halfW + pickupPenW; dc++) {
       const r = centerRow + dr;
       const c = centerCol + dc;
       if (r >= 0 && r < pickupH && c >= 0 && c < pickupW) {
