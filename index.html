@@ -13,150 +13,237 @@
   <div class="app">
     <!-- LEFT SIDEBAR CONTROLS -->
     <aside class="sidebar">
-      <header class="sidebar-header">
-        <h1 class="app-title">
-          Block Draft Drafter
-        </h1>
-      </header>
-
-      <!-- COLOR SECTION -->
-      <section class="panel">
-        <h2 class="panel-title">Color</h2>
-        <div class="field-row color">
-            <div class="base-color">
-              <label>Block A</label>
-              <button id ="baseA-chip" class="color-chip" type="button" onclick="openBasePicker('A')"></button>
-            </div>
-
-            <div class="base-color">
-              <label>Block B</label>
-              <button id ="baseB-chip" class="color-chip" type="button" onclick="openBasePicker('B')"></button>
-            </div>
-        </div>
-      </section>
+      <div class="sidebar-top">
+        <header class="sidebar-header">
+          <h1 class="app-title">
+            Block Draft Drafter
+          </h1>
+          <button class="app-info" id="app-info" onclick="openInfoPanel()">?</button>
+          <button class="sidebar-close" type="button" onclick="closeSidebar()" aria-label="Close controls">✕</button>
+        </header>
+        <!-- MODE SELECTOR -->
+        <select id="draft-mode" onchange="updateLayout()">
+          <option value="block">Double Weave Block</option>
+          <option value="pickup">Double Weave Pickup</option>
+        </select>
+      </div>
 
       <!-- WARP SECTION -->
-      <section class="panel">
-        <h2 class="panel-title">Warp</h2>
-
-        <div class="field-column">
-          <select id="warp-preset" onchange="updateLayout()">
-            <option value="custom">Custom</option>
-            <option value="random">Random</option>
-            <option disabled>────────────</option>
-            <option value="ABABABABABABAB">1:1</option>
-            <option value="AB5AB5AB5AB5A">1:5</option>
-            <option value="AB2A3B4A5B5A5B4A3B2A">Optical</option>
-          </select>
-        </div>
-
-        <div id="col-random-controls" class="random-controls" style="display: none;">
-          <div class="inline-field">
-            <label class="field-label">Length</label>
-          <input type="range" id="col-random-length" min="4" max="100" value="15" oninput="generateColRandom()"/>
+      <details class="panel" id="warp-panel" open>
+        <summary class="panel-title">Warp</summary>
+        <div class="panel-content">
+          <div class="field-column">
+            <select id="warp-preset" onchange="updateLayout()">
+              <option value="custom">Custom</option>
+              <option value="random">Random</option>
+              <option disabled>────────────</option>
+              <option value="ABABABABABABAB">1:1</option>
+              <option value="AB5AB5AB5AB5A">1:5</option>
+              <option value="AB2A3B4A5B5A5B4A3B2A">Optical</option>
+            </select>
           </div>
-          <div class="random-actions">
-            <button type="button" class="btn" onclick="generateColRandom()">
-              Generate
-            </button>
-            <button type="button" class="btn btn-secondary" onclick="editColRandom()">
-              Edit
-            </button>
-          </div>
-        </div>
 
-        <div id="input-cols-wrapper" class="field-column">
-             <label for="input-cols" class="field-label">Edit Sequence:</label>
+          <div id="col-random-controls" class="random-controls" style="display: none;">
+            <div class="inline-field">
+              <label class="field-label">Length</label>
+              <input type="range" id="col-random-length" min="4" max="100" value="15" oninput="generateColRandom()"/>
+            </div>
+            <div class="random-actions">
+              <button type="button" class="btn" onclick="generateColRandom()">
+                Generate
+              </button>
+              <button type="button" class="btn btn-secondary" onclick="editColRandom()">
+                Edit
+              </button>
+            </div>
+          </div>
+
+          <div id="input-cols-wrapper" class="field-column">
+            <label for="input-cols" class="field-label">Edit Sequence:</label>
             <input type="text" id="input-cols" name="input" placeholder="WARP BLOCKS" oninput="updateLayout()" />
             <p class="field-note">e.g. ABABBAAA or ABAB2A3</p>
-        </div>
+          </div>
 
-        <div class="field-row">
-          <label for="col-mirror">Mirror?</label>
-          <input type="checkbox" id="col-mirror" onchange="updateLayout()" />
-        </div>
+          <div class="field-row">
+            <label for="col-mirror">Mirror?</label>
+            <input type="checkbox" id="col-mirror" onchange="updateLayout()" />
+          </div>
 
-        <div class="field-column">
+          <div class="field-column">
             <div class="inline-field">
-                <label for="col-repeats" class="field-label">Repeats</label>
-          <input type="range" id="col-repeats" name="repeats" min="1" max="10" value="1" oninput="updateLayout()" />
+              <label for="col-repeats" class="field-label">Repeats</label>
+              <input type="range" id="col-repeats" name="repeats" min="1" max="10" value="1" oninput="updateLayout()" />
             </div>
+          </div>
         </div>
-      </section>
+      </details>
 
       <!-- WEFT SECTION -->
-      <section class="panel">
-        <h2 class="panel-title">Weft</h2>
+      <details class="panel" id="weft-panel">
+        <summary class="panel-title">Weft</summary>
+        <div class="panel-content">
+          <div class="field-column">
+            <select id="row-mode" onchange="updateLayout()">
+              <option value="tromp" selected>Tromp as Writ</option>
+              <option value="custom">Custom</option>
+              <option value="random">Random</option>
+              <option disabled>────────────</option>
+              <option value="AB5AB5AB5AB5">1:5</option>
+              <option value="C3A5C3A5C3A5C3A5C3">Squares</option>
+            </select>
+          </div>
 
-        <div class="field-column">
-          <select id="row-mode" onchange="updateLayout()">
-            <option value="tromp" selected>Tromp as Writ</option>
-            <option value="custom">Custom</option>
-            <option value="random">Random</option>
-            <option disabled>────────────</option>
-            <option value="AB5AB5AB5AB5">1:5</option>
-            <option value="C3A5C3A5C3A5C3A5C3">Squares</option>
-          </select>
-        </div>
-
-        <div id="row-random-controls" class="random-controls" style="display: none;">
-          <div>
-            <span class="field-label">Include blocks</span>
-            <div class="field-row small">
+          <div id="row-random-controls" class="random-controls" style="display: none;">
+            <div>
+              <span class="field-label">Include blocks</span>
+              <div class="field-row small">
                 <label><input type="checkbox" id="rowRandA" checked onchange="generateRowRandom()" />A</label>
                 <label><input type="checkbox" id="rowRandB" checked onchange="generateRowRandom()" />B</label>
                 <label><input type="checkbox" id="rowRandC" onchange="generateRowRandom()" />C</label>
                 <label><input type="checkbox" id="rowRandD" onchange="generateRowRandom()" />D</label>
+              </div>
             </div>
-          </div>
 
-          <div class="inline-field">
-            <label class="field-label">Length</label>
-             <input type="range" id="row-random-length" min="4" max="100" value="15" oninput="generateRowRandom()"/>
-          </div>
-          <div class="random-actions">
-            <button type="button" class="btn" onclick="generateRowRandom()">
-              Generate
-            </button>
-            <button type="button" class="btn btn-secondary" onclick="editRowRandom()">
-              Edit
-            </button>
-          </div>
-        </div>
-
-        <div id="input-rows-wrapper" class="field-column">
-          <label for="input-rows" class="field-label">Edit Sequence:</label>
-          <input type="text" id="input-rows" name="input" placeholder="WEFT BLOCKS" oninput="updateLayout()" />
-          <p class="field-note">Also add C & D for rows of all one layer</p>
-        </div>
-
-        <div class="field-column">
             <div class="inline-field">
-                <label for="row-repeats" class="field-label">Repeats</label>
-                <input type="range" id="row-repeats" name="repeats" min="1" max="10" value="1" oninput="updateLayout()"/>  
+              <label class="field-label">Length</label>
+              <input type="range" id="row-random-length" min="4" max="100" value="15" oninput="generateRowRandom()"/>
             </div>
-        </div>
-      </section>
+            <div class="random-actions">
+              <button type="button" class="btn" onclick="generateRowRandom()">
+                Generate
+              </button>
+              <button type="button" class="btn btn-secondary" onclick="editRowRandom()">
+                Edit
+              </button>
+            </div>
+          </div>
 
+          <div id="input-rows-wrapper" class="field-column">
+            <label for="input-rows" class="field-label">Edit Sequence:</label>
+            <input type="text" id="input-rows" name="input" placeholder="WEFT BLOCKS" oninput="updateLayout()" />
+            <p class="field-note">Also add C & D for rows of all one layer</p>
+          </div>
+
+          <div class="field-column">
+            <div class="inline-field">
+              <label for="row-repeats" class="field-label">Repeats</label>
+              <input type="range" id="row-repeats" name="repeats" min="1" max="10" value="1" oninput="updateLayout()"/>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- PICKUP SIZE PANEL (pickup mode only) -->
+      <details class="panel" id="pickup-size-panel" style="display:none;">
+        <summary class="panel-title">Size</summary>
+        <div class="panel-content">
+          <div class="inline-field">
+            <label for="pickup-width" class="field-label">Width</label>
+            <input type="range" id="pickup-width" min="1" max="200" value="40" oninput="syncPickupSizeLabels(); updateLayout()" />
+            <span id="pickup-width-label">40</span>
+          </div>
+          <div class="inline-field">
+            <label for="pickup-height" class="field-label">Height</label>
+            <input type="range" id="pickup-height" min="1" max="200" value="40" oninput="syncPickupSizeLabels(); updateLayout()" />
+            <span id="pickup-height-label">40</span>
+          </div>
+        </div>
+      </details>
+
+      <!-- PICKUP PEN PANEL (pickup mode only) -->
+      <details class="panel" id="pickup-pen-panel" style="display:none;">
+        <summary class="panel-title">Pen</summary>
+        <div class="panel-content">
+          <div class="inline-field">
+            <label for="pickup-pen-width" class="field-label">Width</label>
+            <input type="range" id="pickup-pen-width" min="1" max="10" value="1" oninput="syncPenSizeLabels()" />
+            <span id="pickup-pen-width-label">1</span>
+          </div>
+          <div class="inline-field">
+            <label for="pickup-pen-height" class="field-label">Height</label>
+            <input type="range" id="pickup-pen-height" min="1" max="10" value="1" oninput="syncPenSizeLabels()" />
+            <span id="pickup-pen-height-label">1</span>
+          </div>
+        </div>
+      </details>
+
+      <!-- COLOR SECTION -->
+      <details class="panel">
+        <summary class="panel-title">Color</summary>
+        <div class="panel-content">
+          <div class="field-row color">
+            <div class="base-color">
+              <label id="label-block-a">Block A</label>
+              <button id ="baseA-chip" class="color-chip" type="button" onclick="openBasePicker('A')"></button>
+            </div>
+            <div class="base-color">
+              <label id="label-block-b">Block B</label>
+              <button id ="baseB-chip" class="color-chip" type="button" onclick="openBasePicker('B')"></button>
+            </div>
+          </div>
+          <div id="color-mode-row" class="field-row small">
+            <label><input type="radio" name="color-mode" id="color-mode-block" value="block" onchange="updateLayout()" checked /> By block</label>
+            <label><input type="radio" name="color-mode" id="color-mode-thread" value="thread" onchange="updateLayout()" /> By thread</label>
+          </div>
+          <div class="field-column">
+            <span class="field-label">Randomize</span>
+            <div class="random-controls">
+              <div class="inline-field">
+                <label for="palette-size" class="field-label">Colors</label>
+                <input type="range" id="palette-size" min="1" max="18" value="4" oninput="syncPaletteSliderLabel()" />
+                <span id="palette-size-label">4</span>
+              </div>
+              <div class="random-actions">
+                <button type="button" class="btn btn-secondary" onclick="randomizeBaseColors()">Overall</button>
+              </div>
+              <div class="random-actions">
+                <button type="button" class="btn btn-secondary" id="rand-warp-a-btn" onclick="randomizeWarpAColors()">Warp A</button>
+                <button type="button" class="btn btn-secondary" id="rand-warp-b-btn" onclick="randomizeWarpBColors()">Warp B</button>
+              </div>
+              <div class="random-actions">
+                <button type="button" class="btn btn-secondary" id="rand-weft-a-btn" onclick="randomizeWeftAColors()">Weft A</button>
+                <button type="button" class="btn btn-secondary" id="rand-weft-b-btn" onclick="randomizeWeftBColors()">Weft B</button>
+              </div>
+            </div>
+          </div>
+          <button type="button" class="btn btn-secondary btn-full" onclick="resetColors()">Reset colors</button>
+        </div>
+      </details>
+
+      <!-- SAVE SECTION (always expanded) -->
       <section class="panel">
         <h2 class="panel-title">Save</h2>
-        <label class="field-row">
-          <input type="checkbox" id="show-labels" onchange="updateLayout()" />
-          <span>Show sequences</span>
-        </label>
+        <div id="show-sequences-row">
+          <label class="field-row">
+            <input type="checkbox" id="show-labels" onchange="updateLayout()" />
+            <span>Show sequences</span>
+          </label>
+        </div>
+        <div id="show-grid-row" style="display:none;">
+          <label class="field-row">
+            <input type="checkbox" id="show-grid" onchange="makeLayout()" />
+            <span>Show grid</span>
+          </label>
+        </div>
         <button id="save" class="btn btn-primary" onclick="saveImage()">
           Download Image
         </button>
+        <div class="random-actions">
+          <button type="button" class="btn btn-secondary" onclick="exportState()">Save JSON</button>
+          <button type="button" class="btn btn-secondary" onclick="importState()">Load JSON</button>
+        </div>
+        <button type="button" class="btn btn-secondary btn-full" onclick="resetToDefaults()">Reset to Defaults</button>
       </section>
 
-      <button class="app-info" id="app-info" onclick="openInfoPanel()">
-            ?
-      </button>
     </aside>
 
+    <div id="sidebar-overlay" class="sidebar-overlay" onclick="closeSidebar()"></div>
+
     <main class="canvas-area">
+      <button id="sidebar-toggle" class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Toggle controls">Controls</button>
       <div id="canvas-container">
         <div id = "canvas-scale-wrap"></div>
+        <button id="flip-btn" class="flip-btn btn" type="button" onclick="toggleFlip()">Flip cloth</button>
         <div id = "iro-popover" class = "iro-popover" style="display:none;">
           <div id="iro-picker"></div>
           <div id="iro-swatches" class="iro-swatches"></div>

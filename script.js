@@ -1,4 +1,4 @@
-let blockSize = 20;
+let blockSize = 12;
 
 let defaultColSeqStr = "A2BABA4B10BA4BABA2";
 let colSeqStr = defaultColSeqStr;
@@ -14,9 +14,37 @@ let randomRowSeqStr = defaultRowSeqStr;
 let colRepeatCount = 1;
 let rowRepeatCount = 1;
 let mirrorCols = false;
+let flipped = false;
+
+let draftMode        = 'block';
+let pickupW          = 40;
+let pickupH          = 40;
+let pickupGrid       = [];
+let _pickupDrawing   = false;
+let _pickupDrawValue = false;
+let pickupPenW       = 1;
+let pickupPenH       = 1;
+let _cursorCell      = null;
+
+// Swatch drag-to-paint
+let _swatchDragActive   = false;
+let _swatchDragMoved    = false;
+let _swatchDragStartX   = 0;
+let _swatchDragStartY   = 0;
+let _pendingSwatchClick = null;
+
+// Single-repeat thread sequences — set each render, used for color tiling
+let _colBaseSeq = [];
+let _rowBaseSeq = [];
 
 let colorA = '#000000';
 let colorB = '#ffffff';
+let granularColors = false;
+let _prevGranularColors = false;
+// Per-mode color memory: switching block ↔ pickup restores each mode's own colors
+let _savedBlockColors  = null;  // { warpAColors, warpBColors, weftAColors, weftBColors, granularColors }
+let _savedPickupColors = null;
+let _prevDraftMode     = 'block';
 let warpAColors = [];
 let warpBColors = [];
 let weftAColors = [];
@@ -72,6 +100,7 @@ const leftSwatchXA = 20;
 const leftSwatchXB = leftSwatchXA + swatchW + swatchGap;
 
 const gridSwatchGap = 8;
+const weftSwatchGap = 12;
 let gridOffsetX = 0;
 let gridOffsetY = 0;
 let gridWidth   = 0;
@@ -127,7 +156,18 @@ function setup() {
       applyPickedColor(hex);
     });
 
-    updateLayout()
+    initPickupGrid(pickupW, pickupH, false);
+
+    container.addEventListener('pointerdown', onPickupPointerDown);
+    container.addEventListener('pointermove', onPickupPointerMove);
+    container.addEventListener('pointerleave', onPickupPointerLeave);
+    document.addEventListener('pointerup', onPickupPointerUp);
+    document.addEventListener('pointermove', onSwatchDragMove);
+
+    loadStateFromStorage();
+    updateLayout();
+    syncBaseChips();
+    renderIroSwatches();
 }
 
 let colorChangeTimeout = null;
@@ -161,6 +201,7 @@ function applyPickedColor(hex) {
 }
 
 function makeLayout() {
+  if (draftMode === 'pickup') { makePickupLayout(); return; }
   // 1) parse base sequences
   const colBase = parseSequence(colSeqStr);
   const rowBase = parseRowSequence(rowSeqStr);
@@ -196,20 +237,36 @@ function makeLayout() {
     weftLabelSeq = rowSeqRepeated.join("");
   }
 
-  //run-length with repeated sequences
-  const colRuns = calcRuns(colSeqRepeated);
-  const rowRuns = calcRuns(rowSeqRepeated);
+  // block-level runs (before any granular expansion) — needed for mode-change remapping
+  const blockColRuns = calcRuns(colSeqRepeated);
+  const blockRowRuns = calcRuns(rowSeqRepeated);
+
+  // granular: expand each block-run into individual single-thread runs
+  let colRuns, rowRuns;
+  if (granularColors) {
+    colRuns = blockColRuns.flatMap(r => Array.from({length: r.len}, () => ({ch: r.ch, len: 1})));
+    rowRuns = blockRowRuns.flatMap(r => Array.from({length: r.len}, () => ({ch: r.ch, len: 1})));
+  } else {
+    colRuns = blockColRuns;
+    rowRuns = blockRowRuns;
+  }
 
   //run lengths to sizes
   colW = colRuns.map(r => r.len * blockSize);
   rowH = rowRuns.map(r => r.len * blockSize);
 
+  // Store single-repeat base sequences for color tiling
+  _colBaseSeq = colExpanded;
+  _rowBaseSeq = (rowModeVal === "tromp") ? colExpanded : rowBase;
+
   //call thread arrays
-  syncThreadColorArrays()
+  syncThreadColorArrays(colRuns, rowRuns, blockColRuns, blockRowRuns);
+  _prevGranularColors = granularColors;
 
   //toggle when letter changes
-  const colPhase = phasesFromRuns(colRuns);
-  const rowPhase = phasesFromRuns(rowRuns);
+  const phaseFn = granularColors ? phasesFromRunsGranular : phasesFromRuns;
+  const colPhase = phaseFn(colRuns);
+  const rowPhase = phaseFn(rowRuns);
 
   // compute total size of grid
   totalW = 0;
@@ -217,24 +274,24 @@ function makeLayout() {
   for (let c = 0; c < colW.length; c++) totalW += colW[c];
   for (let r = 0; r < rowH.length; r++) totalH += rowH[r];
 
-  // store column positions for the color picker hit detection
+  // store column positions for the color picker hit detection (right-to-left order)
   colPositions = [];
-  let accumX = 0;
-  for (let c=0; c < colW.length; c++) {
+  let accumX = totalW;
+  for (let c = 0; c < colW.length; c++) {
+    accumX -= colW[c];
     colPositions.push({
-      start: accumX, 
+      start: accumX,
       end: accumX + colW[c]
     });
-    accumX += colW[c]
   }
 
   // resize canvas to fit labels
   const showLabels = document.getElementById("show-labels").checked;
   const swatchAreaHeight = topSwatchYB + swatchH + 4;
-  const swatchAreaWidth  = leftSwatchXB + swatchW + 4;
-  const topMargin   = swatchAreaHeight + gridSwatchGap;
-  const leftMargin = swatchAreaWidth + gridSwatchGap;
-  const rightMargin = showLabels ? 40 : 0;
+  const topMargin    = swatchAreaHeight + gridSwatchGap;
+  const leftMargin   = padding;
+  const rightSwatchW = weftSwatchGap + swatchW + swatchGap + swatchW + gridSwatchGap;
+  const rightMargin  = rightSwatchW + (showLabels ? 40 : 0);
 
   resizeCanvas(totalW + leftMargin + rightMargin, totalH + topMargin);
   fitToViewport(totalW + leftMargin + rightMargin, totalH + topMargin);
@@ -242,6 +299,10 @@ function makeLayout() {
 
   offsetX = leftMargin;
   offsetY = topMargin;
+
+  // right-side weft swatch column positions
+  const rightSwatchXA = offsetX + totalW + weftSwatchGap;
+  const rightSwatchXB = rightSwatchXA + swatchW + swatchGap;
 
   gridOffsetX = offsetX;
   gridOffsetY = offsetY;
@@ -251,24 +312,26 @@ function makeLayout() {
   //draw grid
   let y = offsetY;
   for (let r = 0; r < rowH.length; r++) {
-    let x = offsetX;
+    let x = offsetX + totalW;
 
     const rowChar = rowRuns[r].ch;
 
     for (let c = 0; c < colW.length; c++) {
+      x -= colW[c];
+
       let blockLetter;
       if (rowChar === 'C') {
-        blockLetter = 'A';
+        blockLetter = flipped ? 'B' : 'A';
       } else if (rowChar === 'D') {
-        blockLetter = 'B';
+        blockLetter = flipped ? 'A' : 'B';
       } else {
         const on = xor(rowPhase[r], colPhase[c]);
-        blockLetter = on ? 'B' : 'A';
+        blockLetter = (on !== flipped) ? 'B' : 'A';
       }
 
       const baseFill = (blockLetter === 'A') ? colorA : colorB;
       fill (baseFill);
-      rect(x,y, colW[c], rowH[r]);
+      rect(x, y, colW[c], rowH[r]);
 
       let warpCol, weftCol;
       if (blockLetter === 'A') {
@@ -280,9 +343,7 @@ function makeLayout() {
       }
 
       // draw dithered overlay
-      drawDitheredCell(x, y, colW[c], rowH[r], warpCol, weftCol, 2);
-
-      x += colW[c];
+      drawDitheredCell(x, y, colW[c], rowH[r], warpCol, weftCol, 3);
     }
     y += rowH[r];
 
@@ -300,16 +361,18 @@ function makeLayout() {
   textAlign(LEFT, CENTER);
   textSize(12);
 
-  const labelX = offsetX - 36;
-  text('A', labelX, topSwatchYA + swatchH / 2 + 2);
-  text('B', labelX + 15, topSwatchYB + swatchH / 2);
+  textAlign(CENTER, CENTER);
+  text('A', rightSwatchXA + swatchW / 2, topSwatchYA + swatchH / 2);
+  text('B', rightSwatchXB + swatchW / 2, topSwatchYB + swatchH / 2);
+  textAlign(LEFT, CENTER);
 
   stroke (221);
   strokeWeight(2);
 
-  let xPos = offsetX;
+  let xPos = offsetX + totalW;
   for (let c = 0; c < colW.length; c++) {
     const w = colW[c];
+    xPos -= w;
 
     fill(warpAColors[c] || colorA);
     rect(xPos, topSwatchYA, w, swatchH);
@@ -319,11 +382,11 @@ function makeLayout() {
 
     //buttons
     const btnA = ensureSwatchButton(warpBtnA, c, "A", () =>
-      openThreadPickerAtButton(btnA, "warp", "A", c)
+      openThreadPickerAtButton(btnA, "warp", "A", c), "warp", "A", c
     );
 
     const btnB = ensureSwatchButton(warpBtnB, c, "B", () =>
-      openThreadPickerAtButton(btnB, "warp", "B", c)
+      openThreadPickerAtButton(btnB, "warp", "B", c), "warp", "B", c
     );
 
     placeBtnOverCanvasRect(
@@ -337,8 +400,6 @@ function makeLayout() {
       xPos, topSwatchYB,
       xPos + w, topSwatchYB + swatchH
     );
-
-    xPos += w;
   }
 
   let yPos = offsetY;
@@ -346,30 +407,30 @@ function makeLayout() {
     const h = rowH[r];
 
     fill(weftAColors[r] || colorA);
-    rect(leftSwatchXA, yPos, swatchW, h);
+    rect(rightSwatchXA, yPos, swatchW, h);
 
     fill(weftBColors[r] || colorB);
-    rect(leftSwatchXB, yPos, swatchW, h);
+    rect(rightSwatchXB, yPos, swatchW, h);
 
     //buttons
     const btnA = ensureSwatchButton(weftBtnA, r, "A", () =>
-      openThreadPickerAtButton(btnA, "weft", "A", r)
+      openThreadPickerAtButton(btnA, "weft", "A", r), "weft", "A", r
     );
 
     const btnB = ensureSwatchButton(weftBtnB, r, "B", () =>
-      openThreadPickerAtButton(btnB, "weft", "B", r)
+      openThreadPickerAtButton(btnB, "weft", "B", r), "weft", "B", r
     );
 
     placeBtnOverCanvasRect(
       btnA,
-      leftSwatchXA, yPos,
-      leftSwatchXA + swatchW, yPos + h
+      rightSwatchXA, yPos,
+      rightSwatchXA + swatchW, yPos + h
     );
 
     placeBtnOverCanvasRect(
       btnB,
-      leftSwatchXB, yPos,
-      leftSwatchXB + swatchW, yPos + h
+      rightSwatchXB, yPos,
+      rightSwatchXB + swatchW, yPos + h
     );
 
     yPos += h;
@@ -385,7 +446,7 @@ function makeLayout() {
     fill(221);
     rect(offsetX, topSwatchYA - labelBandHeight, totalW, labelBandHeight);
     
-    const weftStripW = rightMargin; 
+    const weftStripW = 40;
     const weftStripX = width - weftStripW;
     rect(weftStripX, offsetY, weftStripW, totalH);
 
@@ -394,34 +455,33 @@ function makeLayout() {
     textSize(12);
     textAlign(CENTER, BOTTOM);
 
-    let xPos = offsetX;
-    for (let c = 0; c < colW.length; c++) {
-      const run  = colRuns[c];  
+    // Always label by block run (not expanded thread runs) so A4 stays A4 in thread mode
+    let xPos = offsetX + totalW;
+    for (let b = 0; b < blockColRuns.length; b++) {
+      const blockW = blockColRuns[b].len * blockSize;
+      xPos -= blockW;
+      const run  = blockColRuns[b];
       const lab  = run.len > 1 ? run.ch + run.len : run.ch;
-      const xMid = xPos + colW[c] / 2;
-      const yLab = topSwatchYA - 5;  
-
-      text(lab, xMid, yLab);
-      xPos += colW[c];
+      text(lab, xPos + blockW / 2, topSwatchYA - 5);
     }
 
     textAlign(LEFT, CENTER);
     let yPos = offsetY;
-    const xLabel = width - 30; 
+    const xLabel = width - 30;
 
-    for (let r = 0; r < rowH.length; r++) {
-      const run  = rowRuns[r];
+    for (let b = 0; b < blockRowRuns.length; b++) {
+      const blockH = blockRowRuns[b].len * blockSize;
+      const run  = blockRowRuns[b];
       const lab  = run.len > 1 ? run.ch + run.len : run.ch;
-      const yMid = yPos + rowH[r] / 2;
-
-      text(lab, xLabel, yMid);
-      yPos += rowH[r];
+      text(lab, xLabel, yPos + blockH / 2);
+      yPos += blockH;
     }
   }
 
   for (let i = colW.length; i < warpBtnA.length; i++) { warpBtnA[i]?.hide(); warpBtnB[i]?.hide(); }
   for (let i = rowH.length; i < weftBtnA.length; i++) { weftBtnA[i]?.hide(); weftBtnB[i]?.hide(); }
 
+  saveStateToStorage();
 }
 
 function getWarpPreset() {
@@ -499,8 +559,41 @@ function updateRowMode(rowInputEl) {
 function updateLayout() {
 
   background(255)
+
+  const newDraftMode = document.getElementById('draft-mode')?.value || 'block';
+  if (newDraftMode !== _prevDraftMode) {
+    // Save current mode's colors before switching
+    if (_prevDraftMode === 'block') {
+      _savedBlockColors = snapshotColors();
+    } else {
+      _savedPickupColors = snapshotColors();
+    }
+    // Restore target mode's colors (if we've been there before)
+    const snap = newDraftMode === 'block' ? _savedBlockColors : _savedPickupColors;
+    applyColorSnap(snap);
+    _prevDraftMode = newDraftMode;
+  }
+  draftMode = newDraftMode;
+  updateModeVisibility();
+
+  if (draftMode === 'pickup') {
+    const newW = Math.max(1, Math.min(200, parseInt(document.getElementById('pickup-width')?.value)  || 40));
+    const newH = Math.max(1, Math.min(200, parseInt(document.getElementById('pickup-height')?.value) || 40));
+    if (newW !== pickupW || newH !== pickupH || pickupGrid.length === 0) {
+      initPickupGrid(newW, newH, pickupGrid.length > 0);
+      pickupW = newW;
+      pickupH = newH;
+    }
+    granularColors = true;
+    syncPenSizeLabels();
+    syncPickupSizeLabels();
+    makePickupLayout();
+    syncBaseChips();
+    return;
+  }
+
   //get input values
-  
+
   const warpPresetSelect = document.getElementById("warp-preset").value;
   const colInputEl = document.getElementById("input-cols");
   const rowInputEl = document.getElementById("input-rows");
@@ -518,6 +611,9 @@ function updateLayout() {
 
   const showLabelsCheckbox = document.getElementById("show-labels");
   showLabels = showLabelsCheckbox ? showLabelsCheckbox.checked : false;
+
+  const colorModeEl = document.querySelector('input[name="color-mode"]:checked');
+  granularColors = colorModeEl ? colorModeEl.value === "thread" : false;
 
   const colRepeats = document.getElementById("col-repeats").value;
   colRepeatCount = parseInt(colRepeats, 10) || 1;
@@ -618,6 +714,17 @@ function phasesFromRuns(runs) {
   return runs.map((_, i) => (start + i) % 2);
 }
 
+// Granular phase: assign by character identity (all A→same phase, all B→opposite)
+// so expanded runs of the same letter don't toggle incorrectly.
+function phasesFromRunsGranular(runs) {
+  const firstCh = runs.find(r => r.ch === 'A' || r.ch === 'B')?.ch ?? 'A';
+  const base = firstCh === 'B' ? 1 : 0;
+  return runs.map(r => {
+    if (r.ch === 'C' || r.ch === 'D') return base;
+    return (base + (r.ch === 'B' ? 1 : 0)) % 2;
+  });
+}
+
 function updateRowInputVisibility() {
   const rowWrapper = document.getElementById("input-rows-wrapper");
   const rowModeVal = document.getElementById("row-mode").value;
@@ -648,7 +755,11 @@ function updateColRandomVisibility() {
 }
 
 function saveImage() {
-  save("blocks.png");
+  const raw  = prompt('Save as:', 'blocks');
+  if (raw === null) return;
+  const name = raw.trim() || 'blocks';
+  const filename = name.endsWith('.png') ? name : name + '.png';
+  save(filename);
 }
 
 function randomABSequence(length = 8) {
@@ -741,15 +852,102 @@ function editRowRandom() {
   updateLayout();
 }
 
-function syncThreadColorArrays() {
+// Returns the index of the run in `runs` that contains thread position `threadIndex`.
+function runIndexForThread(runs, threadIndex) {
+  let t = 0;
+  for (let i = 0; i < runs.length; i++) {
+    t += runs[i].len;
+    if (threadIndex < t) return i;
+  }
+  return runs.length - 1;
+}
+
+function syncThreadColorArrays(colRuns, rowRuns, blockColRuns, blockRowRuns) {
+  const baseColRuns        = calcRuns(_colBaseSeq);
+  const baseColThreadCount = _colBaseSeq.length;
+  const baseRowRuns        = calcRuns(_rowBaseSeq);
+  const baseRowThreadCount = _rowBaseSeq.length;
+
+  // ── Mode transition: remap colors between block-indexed and thread-indexed ──
+  const modeChanged = granularColors !== _prevGranularColors;
+
+  if (modeChanged && warpAColors.length > 0) {
+    const oldA = warpAColors.slice();
+    const oldB = warpBColors.slice();
+    const newA = [], newB = [];
+
+    if (granularColors) {
+      // block → thread: spread each block run's color across all its threads
+      let t = 0;
+      for (let b = 0; b < blockColRuns.length; b++) {
+        for (let k = 0; k < blockColRuns[b].len; k++) {
+          newA[t] = oldA[b] ?? null;
+          newB[t] = oldB[b] ?? null;
+          t++;
+        }
+      }
+    } else {
+      // thread → block: take the first thread's color for each block run
+      let t = 0;
+      for (let b = 0; b < blockColRuns.length; b++) {
+        newA[b] = oldA[t] ?? null;
+        newB[b] = oldB[t] ?? null;
+        t += blockColRuns[b].len;
+      }
+    }
+    warpAColors = newA;
+    warpBColors = newB;
+  }
+
+  if (modeChanged && weftAColors.length > 0) {
+    const oldA = weftAColors.slice();
+    const oldB = weftBColors.slice();
+    const newA = [], newB = [];
+
+    if (granularColors) {
+      // block → thread
+      let t = 0;
+      for (let b = 0; b < blockRowRuns.length; b++) {
+        for (let k = 0; k < blockRowRuns[b].len; k++) {
+          newA[t] = oldA[b] ?? null;
+          newB[t] = oldB[b] ?? null;
+          t++;
+        }
+      }
+    } else {
+      // thread → block
+      let t = 0;
+      for (let b = 0; b < blockRowRuns.length; b++) {
+        newA[b] = oldA[t] ?? null;
+        newB[b] = oldB[t] ?? null;
+        t += blockRowRuns[b].len;
+      }
+    }
+    weftAColors = newA;
+    weftBColors = newB;
+  }
+
+  // ── Length sync: handle sequence changes (repeats, new presets, etc.) ───────
   if (warpAColors.length !== colW.length) {
     const oldA = warpAColors.slice();
     const oldB = warpBColors.slice();
     warpAColors = [];
     warpBColors = [];
+    let threadOffset = 0;
     for (let c = 0; c < colW.length; c++) {
-      warpAColors[c] = (oldA[c] !== undefined) ? oldA[c] : null;
-      warpBColors[c] = (oldB[c] !== undefined) ? oldB[c] : null;
+      if (c < oldA.length) {
+        warpAColors[c] = oldA[c];
+        warpBColors[c] = oldB[c];
+      } else if (baseColThreadCount > 0) {
+        const baseThread = threadOffset % baseColThreadCount;
+        const baseIdx    = granularColors ? baseThread : runIndexForThread(baseColRuns, baseThread);
+        warpAColors[c] = oldA[baseIdx] ?? null;
+        warpBColors[c] = oldB[baseIdx] ?? null;
+      } else {
+        warpAColors[c] = null;
+        warpBColors[c] = null;
+      }
+      threadOffset += colRuns[c].len;
     }
   }
 
@@ -758,12 +956,327 @@ function syncThreadColorArrays() {
     const oldB = weftBColors.slice();
     weftAColors = [];
     weftBColors = [];
+    let threadOffset = 0;
     for (let r = 0; r < rowH.length; r++) {
-      weftAColors[r] = (oldA[r] !== undefined) ? oldA[r] : null;
-      weftBColors[r] = (oldB[r] !== undefined) ? oldB[r] : null;
+      if (r < oldA.length) {
+        weftAColors[r] = oldA[r];
+        weftBColors[r] = oldB[r];
+      } else if (baseRowThreadCount > 0) {
+        const baseThread = threadOffset % baseRowThreadCount;
+        const baseIdx    = granularColors ? baseThread : runIndexForThread(baseRowRuns, baseThread);
+        weftAColors[r] = oldA[baseIdx] ?? null;
+        weftBColors[r] = oldB[baseIdx] ?? null;
+      } else {
+        weftAColors[r] = null;
+        weftBColors[r] = null;
+      }
+      threadOffset += rowRuns[r].len;
     }
   }
 }
+
+// ─── Pickup Mode ─────────────────────────────────────────────────────────────
+
+function initPickupGrid(newW, newH, preserve) {
+  const old = pickupGrid;
+  pickupGrid = [];
+  for (let r = 0; r < newH; r++) {
+    pickupGrid[r] = [];
+    for (let c = 0; c < newW; c++) {
+      pickupGrid[r][c] = preserve && old[r] ? (old[r][c] || false) : false;
+    }
+  }
+}
+
+function syncPickupColorArrays() {
+  while (warpAColors.length < pickupW) { warpAColors.push(null); warpBColors.push(null); }
+  warpAColors.length = pickupW;
+  warpBColors.length = pickupW;
+  while (weftAColors.length < pickupH) { weftAColors.push(null); weftBColors.push(null); }
+  weftAColors.length = pickupH;
+  weftBColors.length = pickupH;
+}
+
+function makePickupLayout() {
+  colW   = Array(pickupW).fill(blockSize);
+  rowH   = Array(pickupH).fill(blockSize);
+  totalW = pickupW * blockSize;
+  totalH = pickupH * blockSize;
+
+  if (pickupGrid.length !== pickupH || (pickupH > 0 && pickupGrid[0].length !== pickupW)) {
+    initPickupGrid(pickupW, pickupH, true);
+  }
+  syncPickupColorArrays();
+
+  const swatchAreaHeight = topSwatchYB + swatchH + 4;
+  const topMargin   = swatchAreaHeight + gridSwatchGap;
+  const leftMargin  = padding;
+  const rightMargin = weftSwatchGap + swatchW + swatchGap + swatchW + gridSwatchGap;
+
+  resizeCanvas(totalW + leftMargin + rightMargin, totalH + topMargin);
+  fitToViewport(totalW + leftMargin + rightMargin, totalH + topMargin);
+  background(221);
+
+  offsetX = leftMargin;
+  offsetY = topMargin;
+  gridOffsetX = offsetX;
+  gridOffsetY = offsetY;
+  gridWidth   = totalW;
+  gridHeight  = totalH;
+
+  const rightSwatchXA = offsetX + totalW + weftSwatchGap;
+  const rightSwatchXB = rightSwatchXA + swatchW + swatchGap;
+
+  // Draw grid cells
+  noStroke();
+  for (let r = 0; r < pickupH; r++) {
+    for (let c = 0; c < pickupW; c++) {
+      const isBack = flipped ? !pickupGrid[r][c] : pickupGrid[r][c];
+      const x = offsetX + c * blockSize;
+      const y = offsetY + r * blockSize;
+      const warpCol = isBack ? (warpBColors[c] || colorB) : (warpAColors[c] || colorA);
+      const weftCol = isBack ? (weftBColors[r] || colorB) : (weftAColors[r] || colorA);
+      drawDitheredCell(x, y, blockSize, blockSize, warpCol, weftCol, 3);
+    }
+  }
+
+  // Grid overlay
+  if (document.getElementById('show-grid')?.checked) {
+    for (let c = 0; c <= pickupW; c++) {
+      const x = offsetX + c * blockSize;
+      strokeWeight(c % 4 === 0 ? 1.5 : 0.5);
+      stroke(221);
+      line(x, offsetY, x, offsetY + totalH);
+    }
+    for (let r = 0; r <= pickupH; r++) {
+      const y = offsetY + r * blockSize;
+      strokeWeight(r % 4 === 0 ? 1.5 : 0.5);
+      stroke(221);
+      line(offsetX, y, offsetX + totalW, y);
+    }
+  }
+
+  // Swatch column labels
+  noStroke();
+  fill(90);
+  textAlign(CENTER, CENTER);
+  textSize(12);
+  text('A', rightSwatchXA + swatchW / 2, topSwatchYA + swatchH / 2);
+  text('B', rightSwatchXB + swatchW / 2, topSwatchYB + swatchH / 2);
+  textAlign(LEFT, CENTER);
+
+  stroke(221);
+  strokeWeight(2);
+
+  // Warp swatches (top strip, left to right)
+  for (let c = 0; c < pickupW; c++) {
+    const x = offsetX + c * blockSize;
+    fill(warpAColors[c] || colorA);
+    rect(x, topSwatchYA, blockSize, swatchH);
+    fill(warpBColors[c] || colorB);
+    rect(x, topSwatchYB, blockSize, swatchH);
+    const btnA = ensureSwatchButton(warpBtnA, c, 'A', () => openThreadPickerAtButton(btnA, 'warp', 'A', c), 'warp', 'A', c);
+    const btnB = ensureSwatchButton(warpBtnB, c, 'B', () => openThreadPickerAtButton(btnB, 'warp', 'B', c), 'warp', 'B', c);
+    placeBtnOverCanvasRect(btnA, x, topSwatchYA, x + blockSize, topSwatchYA + swatchH);
+    placeBtnOverCanvasRect(btnB, x, topSwatchYB, x + blockSize, topSwatchYB + swatchH);
+  }
+
+  // Weft swatches (right strip)
+  for (let r = 0; r < pickupH; r++) {
+    const y = offsetY + r * blockSize;
+    fill(weftAColors[r] || colorA);
+    rect(rightSwatchXA, y, swatchW, blockSize);
+    fill(weftBColors[r] || colorB);
+    rect(rightSwatchXB, y, swatchW, blockSize);
+    const btnA = ensureSwatchButton(weftBtnA, r, 'A', () => openThreadPickerAtButton(btnA, 'weft', 'A', r), 'weft', 'A', r);
+    const btnB = ensureSwatchButton(weftBtnB, r, 'B', () => openThreadPickerAtButton(btnB, 'weft', 'B', r), 'weft', 'B', r);
+    placeBtnOverCanvasRect(btnA, rightSwatchXA, y, rightSwatchXA + swatchW, y + blockSize);
+    placeBtnOverCanvasRect(btnB, rightSwatchXB, y, rightSwatchXB + swatchW, y + blockSize);
+  }
+
+  noStroke();
+
+  for (let i = pickupW; i < warpBtnA.length; i++) { warpBtnA[i]?.hide(); warpBtnB[i]?.hide(); }
+  for (let i = pickupH; i < weftBtnA.length; i++) { weftBtnA[i]?.hide(); weftBtnB[i]?.hide(); }
+
+  // Draw pen cursor outline
+  if (_cursorCell) {
+    const halfW = Math.floor(pickupPenW / 2);
+    const halfH = Math.floor(pickupPenH / 2);
+    const ox = offsetX + (_cursorCell.col - halfW) * blockSize;
+    const oy = offsetY + (_cursorCell.row - halfH) * blockSize;
+    const szW = pickupPenW * blockSize;
+    const szH = pickupPenH * blockSize;
+    noFill();
+    strokeWeight(2);
+    stroke(255);
+    rect(ox, oy, szW, szH);
+    strokeWeight(1);
+    stroke(0);
+    drawingContext.setLineDash([3, 3]);
+    rect(ox, oy, szW, szH);
+    drawingContext.setLineDash([]);
+  }
+
+  _prevGranularColors = true;
+}
+
+function updateModeVisibility() {
+  const isPickup = draftMode === 'pickup';
+
+  ['warp-panel', 'weft-panel', 'color-mode-row', 'show-sequences-row'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isPickup ? 'none' : '';
+  });
+
+  const showGridRow = document.getElementById('show-grid-row');
+  if (showGridRow) showGridRow.style.display = isPickup ? '' : 'none';
+
+  const pickupPanel = document.getElementById('pickup-size-panel');
+  if (pickupPanel) {
+    const wasHidden = pickupPanel.style.display === 'none';
+    pickupPanel.style.display = isPickup ? '' : 'none';
+    if (isPickup && wasHidden) pickupPanel.open = true;
+  }
+
+  const pickupPenPanel = document.getElementById('pickup-pen-panel');
+  if (pickupPenPanel) {
+    const wasHidden = pickupPenPanel.style.display === 'none';
+    pickupPenPanel.style.display = isPickup ? '' : 'none';
+    if (isPickup && wasHidden) pickupPenPanel.open = true;
+  }
+
+  const flipBtn = document.getElementById('flip-btn');
+  if (flipBtn) flipBtn.style.display = '';
+
+  const labelA = document.getElementById('label-block-a');
+  const labelB = document.getElementById('label-block-b');
+  if (labelA) labelA.textContent = isPickup ? 'Front' : 'Block A';
+  if (labelB) labelB.textContent = isPickup ? 'Back'  : 'Block B';
+
+  const randWarpA = document.getElementById('rand-warp-a-btn');
+  const randWarpB = document.getElementById('rand-warp-b-btn');
+  const randWeftA = document.getElementById('rand-weft-a-btn');
+  const randWeftB = document.getElementById('rand-weft-b-btn');
+  if (randWarpA) randWarpA.textContent = isPickup ? 'Warp Front' : 'Warp A';
+  if (randWarpB) randWarpB.textContent = isPickup ? 'Warp Back'  : 'Warp B';
+  if (randWeftA) randWeftA.textContent = isPickup ? 'Weft Front' : 'Weft A';
+  if (randWeftB) randWeftB.textContent = isPickup ? 'Weft Back'  : 'Weft B';
+
+  const canvasArea = document.querySelector('.canvas-area');
+  if (canvasArea) canvasArea.classList.toggle('pickup-mode', isPickup);
+}
+
+function screenToPickupCell(screenX, screenY) {
+  const wrap = document.getElementById('canvas-scale-wrap');
+  if (!wrap) return null;
+  const wr = wrap.getBoundingClientRect();
+  const cx = (screenX - wr.left) / currentScale;
+  const cy = (screenY - wr.top)  / currentScale;
+  if (cx < offsetX || cx >= offsetX + totalW || cy < offsetY || cy >= offsetY + totalH) return null;
+  const col = Math.floor((cx - offsetX) / blockSize);
+  const row = Math.floor((cy - offsetY) / blockSize);
+  if (col < 0 || col >= pickupW || row < 0 || row >= pickupH) return null;
+  return { col, row };
+}
+
+function syncPenSizeLabels() {
+  const sw = document.getElementById('pickup-pen-width');
+  const lw = document.getElementById('pickup-pen-width-label');
+  if (sw && lw) { pickupPenW = parseInt(sw.value) || 1; lw.textContent = sw.value; }
+
+  const sh = document.getElementById('pickup-pen-height');
+  const lh = document.getElementById('pickup-pen-height-label');
+  if (sh && lh) { pickupPenH = parseInt(sh.value) || 1; lh.textContent = sh.value; }
+}
+
+function syncPickupSizeLabels() {
+  const sw = document.getElementById('pickup-width');
+  const lw = document.getElementById('pickup-width-label');
+  if (sw && lw) lw.textContent = sw.value;
+
+  const sh = document.getElementById('pickup-height');
+  const lh = document.getElementById('pickup-height-label');
+  if (sh && lh) lh.textContent = sh.value;
+}
+
+function paintPickupCells(centerRow, centerCol, value) {
+  const halfW = Math.floor(pickupPenW / 2);
+  const halfH = Math.floor(pickupPenH / 2);
+  let changed = false;
+  for (let dr = -halfH; dr <= halfH; dr++) {
+    for (let dc = -halfW; dc <= halfW; dc++) {
+      const r = centerRow + dr;
+      const c = centerCol + dc;
+      if (r >= 0 && r < pickupH && c >= 0 && c < pickupW) {
+        pickupGrid[r][c] = value;
+        changed = true;
+      }
+    }
+  }
+  return changed;
+}
+
+function onPickupPointerDown(e) {
+  if (draftMode !== 'pickup') return;
+  if (e.target.closest('.swatch-btn') || e.target.closest('.iro-popover') || e.target.closest('.flip-btn')) return;
+  const cell = screenToPickupCell(e.clientX, e.clientY);
+  if (!cell) return;
+  _pickupDrawValue = !pickupGrid[cell.row][cell.col];
+  _pickupDrawing = true;
+  paintPickupCells(cell.row, cell.col, _pickupDrawValue);
+  makePickupLayout();
+}
+
+function onPickupPointerMove(e) {
+  if (draftMode !== 'pickup') return;
+  if (_swatchDragActive) return;
+  const cell = screenToPickupCell(e.clientX, e.clientY);
+
+  // Update cursor indicator
+  const prevCursor = _cursorCell;
+  _cursorCell = cell;
+  const cursorMoved = !cell !== !prevCursor ||
+    (cell && prevCursor && (cell.row !== prevCursor.row || cell.col !== prevCursor.col));
+
+  if (_pickupDrawing && cell) {
+    if (paintPickupCells(cell.row, cell.col, _pickupDrawValue)) {
+      makePickupLayout();
+      return; // already redrawn
+    }
+  }
+
+  if (cursorMoved) {
+    makePickupLayout();
+  }
+}
+
+function onPickupPointerLeave() {
+  if (_cursorCell !== null) {
+    _cursorCell = null;
+    if (draftMode === 'pickup') makePickupLayout();
+  }
+}
+
+function onPickupPointerUp() {
+  const wasDrawing = _pickupDrawing;
+  _pickupDrawing = false;
+
+  if (_swatchDragActive) {
+    if (!_swatchDragMoved && _pendingSwatchClick) {
+      _pendingSwatchClick();
+    }
+    _swatchDragActive   = false;
+    _swatchDragMoved    = false;
+    _pendingSwatchClick = null;
+    // color changes already saved via makeLayout() → saveStateToStorage()
+  } else if (wasDrawing) {
+    // pickup grid strokes save here since makePickupLayout() doesn't call saveStateToStorage()
+    saveStateToStorage();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function drawDitheredCell(x, y, w, h, warpCol, weftCol, pixel = 2) {
   noStroke();
@@ -794,13 +1307,23 @@ document.addEventListener("click", (e) => {
 
 // for swatch buttons
 
-function ensureSwatchButton(arr, i, label, onClick) {
+function ensureSwatchButton(arr, i, label, onClickFn, kind, layer, idx) {
   if (!arr[i]) {
     const b = createButton(label);
     b.addClass("swatch-btn");
     b.parent("canvas-container");
     b.style("position", "absolute");
-    b.mousePressed(onClick);
+    b.elt._swatchKind  = kind;
+    b.elt._swatchLayer = layer;
+    b.elt._swatchIdx   = (idx !== undefined) ? idx : i;
+    b.elt.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      _swatchDragStartX   = e.clientX;
+      _swatchDragStartY   = e.clientY;
+      _swatchDragMoved    = false;
+      _swatchDragActive   = true;
+      _pendingSwatchClick = onClickFn;
+    });
     arr[i] = b;
   }
   return arr[i];
@@ -969,6 +1492,7 @@ function renderIroSwatches() {
   const wrap = document.getElementById("iro-swatches");
   if (!wrap) return;
 
+  syncPaletteSliderMax();
   wrap.innerHTML = "";
   
   userSwatches.forEach(hex => {
@@ -1022,6 +1546,391 @@ function addCurrentColorAsSwatch() {
   }
 }
 
+let _activeRandomPalette = null;
+
+function refreshRandomPalette() {
+  const slider = document.getElementById("palette-size");
+  const limit = slider ? Math.min(parseInt(slider.value) || userSwatches.length, userSwatches.length) : userSwatches.length;
+  // Shuffle a copy of the full palette and take the first `limit` entries
+  const shuffled = userSwatches.slice().sort(() => Math.random() - 0.5);
+  _activeRandomPalette = shuffled.slice(0, limit);
+}
+
+function randomSwatch() {
+  const pool = _activeRandomPalette || userSwatches;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function syncPaletteSliderLabel() {
+  const slider = document.getElementById("palette-size");
+  const label  = document.getElementById("palette-size-label");
+  if (slider && label) label.textContent = slider.value;
+}
+
+function syncPaletteSliderMax() {
+  const slider = document.getElementById("palette-size");
+  if (!slider) return;
+  const newMax = userSwatches.length;
+  const oldMax = parseInt(slider.max);
+  // If slider was at max (all swatches), keep it pinned to the new max
+  const wasAtMax = parseInt(slider.value) >= oldMax;
+  slider.max = newMax;
+  if (wasAtMax || parseInt(slider.value) > newMax) {
+    slider.value = newMax;
+  }
+  syncPaletteSliderLabel();
+}
+
+function randomizeBaseColors() {
+  refreshRandomPalette();
+  colorA = randomSwatch();
+  colorB = randomSwatch();
+  syncBaseChips();
+  makeLayout();
+}
+
+function randomizeWarpAColors() {
+  refreshRandomPalette();
+  for (let c = 0; c < colW.length; c++) warpAColors[c] = randomSwatch();
+  makeLayout();
+}
+
+function randomizeWarpBColors() {
+  refreshRandomPalette();
+  for (let c = 0; c < colW.length; c++) warpBColors[c] = randomSwatch();
+  makeLayout();
+}
+
+function randomizeWeftAColors() {
+  refreshRandomPalette();
+  for (let r = 0; r < rowH.length; r++) weftAColors[r] = randomSwatch();
+  makeLayout();
+}
+
+function randomizeWeftBColors() {
+  refreshRandomPalette();
+  for (let r = 0; r < rowH.length; r++) weftBColors[r] = randomSwatch();
+  makeLayout();
+}
+
+function resetColors() {
+  colorA = '#000000';
+  colorB = '#ffffff';
+  warpAColors = warpAColors.map(() => null);
+  warpBColors = warpBColors.map(() => null);
+  weftAColors = weftAColors.map(() => null);
+  weftBColors = weftBColors.map(() => null);
+  syncBaseChips();
+  makeLayout();
+}
+
+function toggleFlip() {
+  flipped = !flipped;
+  const btn = document.getElementById("flip-btn");
+  if (btn) btn.classList.toggle("active", flipped);
+  makeLayout();
+}
+
+function toggleSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  const isOpen  = sidebar.classList.toggle('open');
+  overlay.classList.toggle('active', isOpen);
+}
+
+function closeSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  sidebar.classList.remove('open');
+  overlay.classList.remove('active');
+}
+
 function windowResized() {
   updateLayout();
+}
+
+// ─── Swatch drag-to-paint ─────────────────────────────────────────────────────
+
+function onSwatchDragMove(e) {
+  if (!_swatchDragActive) return;
+  const dx = e.clientX - _swatchDragStartX;
+  const dy = e.clientY - _swatchDragStartY;
+  if (!_swatchDragMoved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+    _swatchDragMoved = true;
+  }
+  if (_swatchDragMoved && lastAppliedHex) {
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const target = el?.classList.contains('swatch-btn') ? el : el?.closest?.('.swatch-btn');
+    if (target?._swatchKind) {
+      paintSwatchDrag(target, lastAppliedHex);
+    }
+  }
+}
+
+function paintSwatchDrag(elt, hex) {
+  const kind  = elt._swatchKind;
+  const layer = elt._swatchLayer;
+  const idx   = elt._swatchIdx;
+  if (!kind || !layer || idx === undefined) return;
+  if (kind === 'warp') {
+    if (layer === 'A') warpAColors[idx] = hex;
+    else               warpBColors[idx] = hex;
+  } else {
+    if (layer === 'A') weftAColors[idx] = hex;
+    else               weftBColors[idx] = hex;
+  }
+  makeLayout();
+}
+
+// ─── Persistence ──────────────────────────────────────────────────────────────
+
+function setEl(id, prop, val) {
+  const el = document.getElementById(id);
+  if (el) el[prop] = val;
+}
+
+// ─── Per-mode color memory ─────────────────────────────────────────────────────
+function snapshotColors() {
+  return {
+    warpAColors:    warpAColors.slice(),
+    warpBColors:    warpBColors.slice(),
+    weftAColors:    weftAColors.slice(),
+    weftBColors:    weftBColors.slice(),
+    granularColors,
+  };
+}
+
+function cloneColorSnap(snap) {
+  if (!snap) return null;
+  return {
+    warpAColors:    snap.warpAColors.slice(),
+    warpBColors:    snap.warpBColors.slice(),
+    weftAColors:    snap.weftAColors.slice(),
+    weftBColors:    snap.weftBColors.slice(),
+    granularColors: snap.granularColors,
+  };
+}
+
+function applyColorSnap(snap) {
+  if (!snap) return;
+  warpAColors         = snap.warpAColors.slice();
+  warpBColors         = snap.warpBColors.slice();
+  weftAColors         = snap.weftAColors.slice();
+  weftBColors         = snap.weftBColors.slice();
+  granularColors      = snap.granularColors;
+  _prevGranularColors = granularColors; // prevent syncThreadColorArrays from remapping
+}
+
+function buildStateObject() {
+  return {
+    version: 1,
+    draftMode,
+    colSeqStr, customColSeqStr, randomColSeqStr, lastWarpPresetValue,
+    rowSeqStr, randomRowSeqStr, lastRowMode,
+    colRepeatCount, rowRepeatCount, mirrorCols,
+    pickupW, pickupH,
+    pickupGrid: pickupGrid.map(r => Array.isArray(r) ? r.slice() : []),
+    pickupPenW, pickupPenH,
+    colorA, colorB, granularColors, flipped,
+    warpAColors: warpAColors.slice(),
+    warpBColors: warpBColors.slice(),
+    weftAColors: weftAColors.slice(),
+    weftBColors: weftBColors.slice(),
+    userSwatches: userSwatches.slice(),
+    savedBlockColors:  cloneColorSnap(_savedBlockColors),
+    savedPickupColors: cloneColorSnap(_savedPickupColors),
+    ui: {
+      draftMode,
+      warpPreset:      document.getElementById('warp-preset')?.value        ?? 'ABABABABABABAB',
+      inputCols:       document.getElementById('input-cols')?.value          ?? '',
+      colRepeats:      document.getElementById('col-repeats')?.value         ?? '1',
+      colMirror:       document.getElementById('col-mirror')?.checked        ?? false,
+      rowMode:         document.getElementById('row-mode')?.value            ?? 'tromp',
+      inputRows:       document.getElementById('input-rows')?.value          ?? '',
+      rowRepeats:      document.getElementById('row-repeats')?.value         ?? '1',
+      showLabels:      document.getElementById('show-labels')?.checked       ?? false,
+      showGrid:        document.getElementById('show-grid')?.checked         ?? false,
+      colorMode:       document.querySelector('input[name="color-mode"]:checked')?.value ?? 'block',
+      pickupWidth:     document.getElementById('pickup-width')?.value        ?? '40',
+      pickupHeight:    document.getElementById('pickup-height')?.value       ?? '40',
+      pickupPenWidth:  document.getElementById('pickup-pen-width')?.value    ?? '1',
+      pickupPenHeight: document.getElementById('pickup-pen-height')?.value   ?? '1',
+    }
+  };
+}
+
+function applyStateObject(s) {
+  if (!s || s.version !== 1) return;
+  draftMode           = s.draftMode           || 'block';
+  colSeqStr           = s.colSeqStr           || defaultColSeqStr;
+  customColSeqStr     = s.customColSeqStr      || colSeqStr;
+  randomColSeqStr     = s.randomColSeqStr      || colSeqStr;
+  lastWarpPresetValue = s.lastWarpPresetValue  || 'custom';
+  rowSeqStr           = s.rowSeqStr            || defaultRowSeqStr;
+  randomRowSeqStr     = s.randomRowSeqStr      || rowSeqStr;
+  lastRowMode         = s.lastRowMode          || 'tromp';
+  colRepeatCount      = s.colRepeatCount       || 1;
+  rowRepeatCount      = s.rowRepeatCount       || 1;
+  mirrorCols          = s.mirrorCols           || false;
+  pickupW             = s.pickupW              || 40;
+  pickupH             = s.pickupH              || 40;
+  pickupGrid          = Array.isArray(s.pickupGrid)
+    ? s.pickupGrid.map(r => Array.isArray(r) ? r.slice() : [])
+    : [];
+  pickupPenW          = s.pickupPenW           || 1;
+  pickupPenH          = s.pickupPenH           || 1;
+  colorA              = s.colorA               || '#000000';
+  colorB              = s.colorB               || '#ffffff';
+  granularColors      = s.granularColors       || false;
+  _prevGranularColors = granularColors;
+  flipped             = s.flipped              || false;
+  warpAColors         = Array.isArray(s.warpAColors) ? s.warpAColors.slice() : [];
+  warpBColors         = Array.isArray(s.warpBColors) ? s.warpBColors.slice() : [];
+  weftAColors         = Array.isArray(s.weftAColors) ? s.weftAColors.slice() : [];
+  weftBColors         = Array.isArray(s.weftBColors) ? s.weftBColors.slice() : [];
+  if (Array.isArray(s.userSwatches) && s.userSwatches.length > 0) {
+    userSwatches = s.userSwatches.slice();
+  }
+  _savedBlockColors  = cloneColorSnap(s.savedBlockColors  || null);
+  _savedPickupColors = cloneColorSnap(s.savedPickupColors || null);
+  _prevDraftMode     = s.draftMode || 'block'; // so first updateLayout doesn't re-trigger a swap
+
+  const ui = s.ui || {};
+  setEl('draft-mode',        'value',   ui.draftMode    || 'block');
+  setEl('warp-preset',       'value',   ui.warpPreset   || 'ABABABABABABAB');
+  setEl('input-cols',        'value',   ui.inputCols    || '');
+  setEl('col-repeats',       'value',   ui.colRepeats   || '1');
+  setEl('col-mirror',        'checked', !!ui.colMirror);
+  setEl('row-mode',          'value',   ui.rowMode      || 'tromp');
+  setEl('input-rows',        'value',   ui.inputRows    || '');
+  setEl('row-repeats',       'value',   ui.rowRepeats   || '1');
+  setEl('show-labels',       'checked', !!ui.showLabels);
+  setEl('show-grid',         'checked', !!ui.showGrid);
+  setEl('pickup-width',      'value',   String(ui.pickupWidth     || 40));
+  setEl('pickup-height',     'value',   String(ui.pickupHeight    || 40));
+  setEl('pickup-pen-width',  'value',   String(ui.pickupPenWidth  || 1));
+  setEl('pickup-pen-height', 'value',   String(ui.pickupPenHeight || 1));
+
+  const colorMode = ui.colorMode || 'block';
+  const radio = document.querySelector(`input[name="color-mode"][value="${colorMode}"]`);
+  if (radio) radio.checked = true;
+
+  const flipBtn = document.getElementById('flip-btn');
+  if (flipBtn) flipBtn.classList.toggle('active', !!s.flipped);
+}
+
+function saveStateToStorage() {
+  try {
+    localStorage.setItem('blockDraftState', JSON.stringify(buildStateObject()));
+  } catch(e) { /* quota exceeded or private browsing */ }
+}
+
+function loadStateFromStorage() {
+  try {
+    const raw = localStorage.getItem('blockDraftState');
+    if (!raw) return false;
+    const s = JSON.parse(raw);
+    applyStateObject(s);
+    return true;
+  } catch(e) { return false; }
+}
+
+function exportState() {
+  const raw  = prompt('Save as:', 'block-draft');
+  if (raw === null) return;                          // cancelled
+  const name = raw.trim() || 'block-draft';
+  const filename = name.endsWith('.json') ? name : name + '.json';
+
+  const data = buildStateObject();
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function importState() {
+  const input  = document.createElement('input');
+  input.type   = 'file';
+  input.accept = '.json,application/json';
+  input.addEventListener('change', (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const s = JSON.parse(ev.target.result);
+        applyStateObject(s);
+        updateLayout();
+        syncBaseChips();
+        renderIroSwatches();
+      } catch(err) {
+        alert('Could not read save file: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  });
+  input.click();
+}
+
+function resetToDefaults() {
+  localStorage.removeItem('blockDraftState');
+  // preserve whichever mode (block / pickup) the user is currently in
+  const currentMode   = draftMode;
+  draftMode           = currentMode;
+  colSeqStr           = defaultColSeqStr;
+  customColSeqStr     = defaultColSeqStr;
+  randomColSeqStr     = defaultColSeqStr;
+  lastWarpPresetValue = 'custom';
+  rowSeqStr           = defaultRowSeqStr;
+  randomRowSeqStr     = defaultRowSeqStr;
+  lastRowMode         = 'tromp';
+  colRepeatCount      = 1;
+  rowRepeatCount      = 1;
+  mirrorCols          = false;
+  flipped             = false;
+  pickupW             = 40;
+  pickupH             = 40;
+  pickupGrid          = [];
+  pickupPenW          = 1;
+  pickupPenH          = 1;
+  colorA              = '#000000';
+  colorB              = '#ffffff';
+  granularColors      = false;
+  _prevGranularColors = false;
+  _savedBlockColors   = null;
+  _savedPickupColors  = null;
+  _prevDraftMode      = currentMode;
+  warpAColors         = [];
+  warpBColors         = [];
+  weftAColors         = [];
+  weftBColors         = [];
+
+  setEl('warp-preset',       'value',   'custom');
+  setEl('input-cols',        'value',   defaultColSeqStr);
+  setEl('col-repeats',       'value',   '1');
+  setEl('col-mirror',        'checked', false);
+  setEl('row-mode',          'value',   'tromp');
+  setEl('input-rows',        'value',   '');
+  setEl('row-repeats',       'value',   '1');
+  setEl('show-labels',       'checked', false);
+  setEl('show-grid',         'checked', false);
+  setEl('pickup-width',      'value',   '40');
+  setEl('pickup-height',     'value',   '40');
+  setEl('pickup-pen-width',  'value',   '1');
+  setEl('pickup-pen-height', 'value',   '1');
+  const radio = document.querySelector('input[name="color-mode"][value="block"]');
+  if (radio) radio.checked = true;
+
+  const flipBtn = document.getElementById('flip-btn');
+  if (flipBtn) flipBtn.classList.remove('active');
+
+  updateLayout();
+  syncBaseChips();
+  renderIroSwatches();
 }

@@ -29,6 +29,12 @@ body {
   overflow:scroll;
 }
 
+.sidebar-top {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .sidebar-header {
   display: flex;
   align-items: flex-start;
@@ -46,15 +52,59 @@ body {
 .panel {
   padding-top: 8px;
   border-top: 2px solid #000;
+}
+
+/* Non-accordion Save panel keeps flex layout directly */
+section.panel {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.panel-title {
+/* Accordion panels use details/summary */
+details.panel {
+  display: block;
+}
+
+.panel-title,
+summary.panel-title {
   margin: 0 0 4px 0;
   font-size: 16px;
   font-weight: 700;
+}
+
+summary.panel-title {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 0;
+  user-select: none;
+  margin-bottom: 0;
+}
+
+summary.panel-title::-webkit-details-marker {
+  display: none;
+}
+
+summary.panel-title::after {
+  content: '+';
+  font-size: 22px;
+  font-weight: 300;
+  line-height: 1;
+  opacity: 0.5;
+}
+
+details.panel[open] > summary.panel-title::after {
+  content: '−';
+}
+
+.panel-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 14px;
 }
 
 .field-row {
@@ -103,6 +153,16 @@ p.field-note {
 
 .inline-field input[type="range"] {
   flex: 1; /* slider expands */
+}
+
+#palette-size-label,
+#pickup-width-label,
+#pickup-height-label,
+#pickup-pen-width-label,
+#pickup-pen-height-label {
+  min-width: 3ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .sidebar label {
@@ -177,6 +237,11 @@ p.field-note {
   margin-top: 8px;
 }
 
+.btn-full {
+  width: 100%;
+  margin-top: 4px;
+}
+
 .btn-secondary {
   background: #fff;
   border: 1px solid #000;
@@ -198,6 +263,26 @@ p.field-note {
 .sidebar input[type="checkbox"] {
   width: 20px;
   height: 20px;
+}
+
+.sidebar input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #000;
+  flex-shrink: 0;
+}
+
+.sidebar input[type="number"] {
+  width: 80px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #999;
+  font-size: 16px;
+  background: #fff;
+}
+
+.canvas-area.pickup-mode {
+  cursor: crosshair;
 }
 
 .canvas-area {
@@ -369,4 +454,168 @@ p.info-credit, .info-credit a {
 
 .info-credit a:hover {
     color: #000;
+}
+
+/* ── Mobile drawer ─────────────────────────────────────────────────────────── */
+
+/* Toggle button — hidden on desktop, floats top-left on mobile */
+.sidebar-toggle {
+  display: none;
+}
+
+/* Backdrop — hidden until drawer opens */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 190;
+}
+
+.sidebar-overlay.active {
+  display: block;
+}
+
+/* Close button — only shown on mobile */
+.sidebar-close {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  /* Sidebar becomes a fixed off-screen drawer */
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 300px;
+    height: 100dvh;
+    z-index: 200;
+    transform: translateX(-100%);
+    transition: transform 0.28s ease;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.18);
+    gap: 24px;
+    padding: 16px;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  /* Shrink type for controls */
+  .app-title {
+    font-size: 32px;
+  }
+
+  .sidebar label,
+  .sidebar select,
+  .sidebar input[type="text"],
+  .sidebar input[type="number"],
+  .field-label,
+  .panel-title,
+  .btn,
+  p.field-note {
+    font-size: 14px;
+  }
+
+  .sidebar input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+  }
+
+  /* Pull header back to flex-start so ? and ✕ can cluster on the right */
+  .sidebar-header {
+    justify-content: flex-start;
+  }
+
+  /* Move ? button inline so close sits just to its right */
+  .app-info {
+    position: static;
+    width: 32px;
+    height: 32px;
+    inline-size: 32px;
+    font-size: 16px;
+    flex-shrink: 0;
+    top: unset;
+    right: unset;
+    margin-left: auto;
+  }
+
+  /* Close button — visible inside sidebar on mobile */
+  .sidebar-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid #000;
+    background: transparent;
+    color: #000;
+    font-size: 16px;
+    cursor: pointer;
+  }
+
+  .sidebar-close:hover {
+    background: #000;
+    color: #fff;
+  }
+
+  /* Canvas fills the whole screen */
+  .canvas-area {
+    width: 100vw;
+  }
+
+  /* "Controls" toggle — visible, top-left of canvas area */
+  .sidebar-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: 14px;
+    left: 14px;
+    z-index: 150;
+    height: 36px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: none;
+    background: #000;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  }
+
+  .sidebar-toggle:hover {
+    opacity: 0.8;
+  }
+
+  /* Info panel — match sidebar width so it doesn't go off screen */
+  .info-panel-inner {
+    width: 300px;
+  }
+
+  .info-panel p {
+    font-size: 16px;
+  }
+}
+
+/* Flip cloth button — sits at the bottom-centre of the canvas area */
+.flip-btn {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  background: #000;
+  color: #fff;
+  border: none;
+  white-space: nowrap;
+  font-size: 14px;
+  padding: 8px 18px;
+}
+
+.flip-btn.active {
+  background: #444;
 }
